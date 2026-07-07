@@ -1,0 +1,27 @@
+little_term.code-workspace
+.idea/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+tempCodeRunnerFile.py
+utils/winlog/.state/
+*.sqlite
+utils/winlog/.state
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.log
+
+# Frontend generated dependencies/build output
+frontend/node_modules/
+frontend/dist/
+xiaoxueqi/static/spa/
+
+# Runtime capture/upload data
+data/uploads/
+data/live_captures/
+*.pcap
+*.pcapng

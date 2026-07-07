@@ -1,0 +1,286 @@
+# -----------------------------------------------------------------------------
+# 4. 缺失的关键规则补充 (Lazarus 特征)
+# -----------------------------------------------------------------------------
+
+# 对应攻击.md P2: 初始入侵 (wget 下载)
+- rule_id: "HB_100_IngressTool_Wget"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0011"
+    technique_id: "T1105"
+    technique_name: "Ingress Tool Transfer"
+  trigger:
+    event_type: "process_create"
+    entities:
+      process_name: ["wget", "curl"]
+
+# 对应攻击.md P4: 横向移动 (sshpass)
+- rule_id: "HB_009_LateralTool_SSH"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0008"
+    technique_id: "T1021.004"
+    technique_name: "SSH"
+  trigger:
+    event_type: "process_create"
+    entities:
+      process_name: "sshpass"
+
+- rule_id: "HB_101_WMI_Execution"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0002"
+    tactic_name: "Execution"
+    technique_id: "T1047"
+    technique_name: "Windows Management Instrumentation"
+  trigger:
+    event_type: "process_create"
+    entities:
+      process_name: "WmiPrvSE.exe"
+      parent_process: "svchost.exe" # WMI 通常由 svchost 启动
+  description: "Detects WMI provider host execution often used for lateral movement."
+
+- rule_id: "HB_102_Shadow_Copy"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0006"
+    tactic_name: "Credential Access"
+    technique_id: "T1003.008"
+    technique_name: "OS Credential Dumping"
+  trigger:
+    event_type: "file_read"
+    entities:
+      file_path: "/etc/shadow" # 对应攻击.md 中的敏感文件窃取
+  description: "Detects reading of critical shadow file."
+
+
+# -----------------------------------------------------------------------------
+# 1. 主机日志规则 (Host Log Rules)
+# 对应题目功能：身份溯源、登录会话重建、暴力破解检测、权限提升检测
+# -----------------------------------------------------------------------------
+
+- rule_id: "HL_001_BruteForce"
+  data_source: "host_log"
+  attack_mapping:
+    tactic_id: "TA0006"
+    tactic_name: "Credential Access"
+    technique_id: "T1110"
+    technique_name: "Brute Force"
+  trigger:
+    event_type: "user_logon_failed"
+    threshold: 10
+  description: "Detects multiple failed login attempts indicative of brute force."
+
+- rule_id: "HL_002_AccountManipulation"
+  data_source: "host_log"
+  attack_mapping:
+    tactic_id: "TA0003"
+    tactic_name: "Persistence"
+    technique_id: "T1098"
+    technique_name: "Account Manipulation"
+  trigger:
+    event_type: "group_membership_add"
+    # [Fix] 接口文档未明确 target_group，但标准日志解析会包含。假设代码会解析 entities
+    entities:
+      target_group: "Administrators"
+  description: "Detects user addition to privileged groups."
+
+- rule_id: "HL_003_LogClearing"
+  data_source: "host_log"
+  attack_mapping:
+    tactic_id: "TA0005"
+    tactic_name: "Defense Evasion"
+    technique_id: "T1070"
+    technique_name: "Indicator Removal on Host"
+  trigger:
+    event_type: "log_clear"
+  description: "Detects clearing of system logs to hide tracks."
+
+# -----------------------------------------------------------------------------
+# 2. 主机行为规则 (Host Behavior Rules)
+# 对应题目功能：进程行为链分析、内存行为分析、系统调用拦截、文件操作监控
+# -----------------------------------------------------------------------------
+
+- rule_id: "HB_001_AbnormalParent"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0002"
+    tactic_name: "Execution"
+    technique_id: "T1059"
+    technique_name: "Command and Scripting Interpreter"
+  trigger:
+    event_type: "process_create"
+    behavior_features:
+      is_abnormal_parent: true
+    threshold: 1
+  description: "Detects shell execution from abnormal parent processes."
+
+- rule_id: "HB_002_ProcessInjection"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0005"
+    tactic_name: "Defense Evasion"
+    technique_id: "T1055"
+    technique_name: "Process Injection"
+  trigger:
+    event_type: "process_injection"
+    behavior_features:
+      has_memory_injection: true
+  description: "Detects code injection into other processes."
+
+- rule_id: "HB_003_Persistence_Registry"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0003"
+    tactic_name: "Persistence"
+    technique_id: "T1547.001"
+    technique_name: "Registry Run Keys / Startup Folder"
+  trigger:
+    event_type: "registry_set_value"
+    # [Fix] 这里的匹配逻辑需要在 Attck_Map.py 中支持 entities 的正则/包含匹配
+    entities:
+      registry_key: "CurrentVersion\\Run"
+  description: "Detects modification of registry run keys for persistence."
+
+- rule_id: "HB_004_Webshell_Creation"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0003"
+    tactic_name: "Persistence"
+    technique_id: "T1505.003"
+    technique_name: "Server Software Component: Web Shell"
+  trigger:
+    event_type: "file_create"
+    # [Fix] 移除了 condition_extra，建议在 Agent 端做后缀判断并打上 features 标签
+    # 或者你需要升级 Attck_Map.py 来支持 file_extension 的提取判断
+    behavior_features:
+      is_suspicious_extension: true
+    threshold: 1
+  description: "Detects creation of web shell scripts (php/jsp/asp)."
+
+- rule_id: "HB_005_SensitiveFileAccess"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0006"
+    tactic_name: "Credential Access"
+    technique_id: "T1003.008"
+    technique_name: "OS Credential Dumping"
+  trigger:
+    event_type: "file_read"
+    # [Fix] 接口文档 behavior_features 需扩充此字段，或 Agent 需支持
+    behavior_features:
+      is_sensitive_path: true
+  description: "Detects reading of sensitive system credential files."
+
+- rule_id: "HB_006_SuspiciousFileExec"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0002"
+    tactic_name: "Execution"
+    technique_id: "T1059.004"
+    technique_name: "Unix Shell"
+  trigger:
+    # [Fix] 原 file_change_permission 不存在，改为 process_create 监控 chmod 命令
+    event_type: "process_create"
+    entities:
+      process_name: "chmod"
+    # 需代码支持 cmdline 关键字匹配
+    behavior_features:
+      is_suspicious_cmd: true
+  description: "Detects executable permission setting via chmod +x."
+
+- rule_id: "HB_007_DiscoveryCommands"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0007"
+    tactic_name: "Discovery"
+    technique_id: "T1082"
+    technique_name: "System Information Discovery"
+  trigger:
+    event_type: "process_create"
+    # [Fix] 移除 condition_extra，改为明确的 entities 列表匹配
+    # 注意：Attck_Map.py 需要添加逻辑支持 value 为列表时的 "IN" 判断
+    entities:
+      process_name: ["whoami", "id", "ifconfig", "ip", "netstat", "uname"]
+    threshold: 1
+  description: "Detects rapid execution of system discovery commands."
+
+- rule_id: "HB_008_CronPersistence"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0003"
+    tactic_name: "Persistence"
+    technique_id: "T1053.003"
+    technique_name: "Scheduled Task/Job: Cron"
+  trigger:
+    event_type: "file_modify"
+    # [Fix] 移除 condition_extra，改为 features (推荐) 或 entities 包含匹配
+    behavior_features:
+      is_cron_job_path: true
+  description: "Detects modification of cron jobs for persistence."
+
+- rule_id: "HB_009_LateralTool_SSH"
+  data_source: "host_behavior"
+  attack_mapping:
+    tactic_id: "TA0008"
+    tactic_name: "Lateral Movement"
+    technique_id: "T1021.004"
+    technique_name: "SSH"
+  trigger:
+    event_type: "process_create"
+    entities:
+      process_name: "sshpass"  # 攻击脚本明确使用了 sshpass
+  description: "Detects usage of sshpass for automated SSH login (Lateral Movement)."
+
+# -----------------------------------------------------------------------------
+# 3. 网络流量规则 (Network Traffic Rules)
+# 对应题目功能：隐蔽信道检测、数据外传检测、C2基础设施关联
+# -----------------------------------------------------------------------------
+
+- rule_id: "NT_001_DNSTunneling"
+  data_source: "network_traffic"
+  attack_mapping:
+    tactic_id: "TA0011"
+    tactic_name: "Command and Control"
+    technique_id: "T1071.004"
+    technique_name: "DNS Tunneling"
+  trigger:
+    event_type: "dns_tunnel_suspected"
+    traffic_features:
+      is_covert_channel: true
+      channel_type: "DNS Tunneling"
+  description: "Detects C2 communication over DNS tunneling."
+
+- rule_id: "NT_002_ICMPTunneling"
+  data_source: "network_traffic"
+  attack_mapping:
+    tactic_id: "TA0011"
+    tactic_name: "Command and Control"
+    technique_id: "T1095"
+    technique_name: "Non-Application Layer Protocol"
+  trigger:
+    event_type: "icmp_tunnel_suspected"
+  description: "Detects C2 communication over ICMP (Ping Tunnel)."
+
+- rule_id: "NT_003_DataExfiltration"
+  data_source: "network_traffic"
+  attack_mapping:
+    tactic_id: "TA0010"
+    tactic_name: "Exfiltration"
+    technique_id: "T1048"
+    technique_name: "Exfiltration Over Alternative Protocol"
+  trigger:
+    event_type: "data_exfiltration"
+  description: "Detects large volume of data being sent to external IP."
+
+- rule_id: "NT_004_PortScanning"
+  data_source: "network_traffic"
+  attack_mapping:
+    tactic_id: "TA0007"
+    tactic_name: "Discovery"
+    technique_id: "T1046"
+    technique_name: "Network Service Scanning"
+  trigger:
+    event_type: "port_scan"
+  description: "Detects internal reconnaissance via port scanning."
+

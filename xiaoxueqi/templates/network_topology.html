@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block title %}网络拓扑 — SecTrace{% endblock %}
+{% block page_title %}企业网络拓扑可视化{% endblock %}
+{% block extra_css %}
+<style>
+#topoCanvas{width:100%;height:540px;background:#fafbfd;border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;cursor:grab}
+#topoCanvas:active{cursor:grabbing}
+.topo-legend{position:absolute;top:12px;right:12px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;font-size:11px;z-index:5;box-shadow:var(--shadow-sm)}
+.topo-legend span{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.topo-tooltip{position:absolute;background:#fff;border:1px solid var(--border-lit);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;pointer-events:none;z-index:10;display:none;max-width:300px;box-shadow:var(--shadow-lg)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-title">&#9673; 企业网络拓扑可视化 <small>6节点 · 5安全区 · DMZ + 内网 + 管理区</small></div>
+
+<div class="row">
+  <div class="col-8">
+    <div id="topoCanvas">
+      <canvas id="topoCanvasEl"></canvas>
+      <div class="topo-legend">
+        <div><span style="background:var(--red)"></span> 外部威胁区</div>
+        <div><span style="background:var(--orange)"></span> DMZ隔离区 (低安全)</div>
+        <div><span style="background:var(--primary)"></span> 内网核心区 (中安全)</div>
+        <div><span style="background:var(--green)"></span> 内网高安全区</div>
+        <div><span style="background:var(--purple)"></span> 安全管理区 (SOC)</div>
+      </div>
+      <div class="topo-tooltip" id="topoTip"></div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card mb-3">
+      <div class="card-header">&#128202; 网络概览</div>
+      <div class="card-body" id="netSummary" style="font-size:13px"><div class="text-dim">加载中...</div></div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-header">&#128187; 节点详情 <small class="text-dim">点击节点查看</small></div>
+      <div class="card-body" id="nodeDetail" style="font-size:12px;max-height:260px;overflow-y:auto"><div class="text-dim">点击拓扑图中的节点</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header">&#128737; 安全态势</div>
+      <div class="card-body text-center" id="secPosture"><div class="text-dim">加载中...</div></div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/network_topology.js') }}"></script>
+{% endblock %}

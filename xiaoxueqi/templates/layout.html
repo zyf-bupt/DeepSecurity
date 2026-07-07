@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SecTrace — LLM攻击检测·捕获·溯源系统{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <!-- ====== Sidebar ====== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">&#128737;</div>
+      <div class="sidebar-title">SecTrace</div>
+      <div class="sidebar-sub">LLM-Powered Detection</div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" href="{{ url_for('main.index') }}"><span class="nav-icon">&#8962;</span>系统首页</a>
+      <a class="nav-item" href="{{ url_for('dashboard.index') }}"><span class="nav-icon">&#9776;</span>仪表盘</a>
+      <span class="nav-section">—— 核心功能 ——</span>
+      <a class="nav-item" href="{{ url_for('scenario.index') }}"><span class="nav-icon">&#9878;</span>场景管理</a>
+      <a class="nav-item" href="{{ url_for('detection.index') }}"><span class="nav-icon">&#128270;</span>攻击检测</a>
+      <a class="nav-item" href="{{ url_for('attribution.index') }}"><span class="nav-icon">&#9879;</span>溯源归因</a>
+      <span class="nav-section">—— 数据分析 ——</span>
+      <a class="nav-item" href="{{ url_for('attack.index') }}"><span class="nav-icon">&#9000;</span>攻击链分析</a>
+      <a class="nav-item" href="{{ url_for('traceback.index') }}"><span class="nav-icon">&#8986;</span>溯源分析</a>
+      <a class="nav-item" href="{{ url_for('logs.list_logs') }}"><span class="nav-icon">&#128196;</span>日志分析</a>
+      <a class="nav-item" href="{{ url_for('behavior.index') }}"><span class="nav-icon">&#9881;</span>行为监控</a>
+      <a class="nav-item" href="{{ url_for('traffic.index') }}"><span class="nav-icon">&#9729;</span>流量分析</a>
+      <a class="nav-item" href="{{ url_for('scenario.network_topology') }}"><span class="nav-icon">&#9673;</span>网络拓扑</a>
+    </nav>
+    <div class="sidebar-footer"><small>SecTrace v2.0 &copy; 2026</small></div>
+  </aside>
+
+  <!-- ====== Main ====== -->
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="topbar-toggler" id="sidebarToggle">&#9776;</button>
+      <div class="topbar-title">{% block page_title %}SecTrace 安全分析平台{% endblock %}</div>
+      <div class="topbar-right">
+        <span class="topbar-status" id="sysStatus">● 系统就绪</span>
+      </div>
+    </header>
+    <main class="content-area">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+  document.getElementById('sidebarToggle').addEventListener('click', function(){
+    document.getElementById('sidebar').classList.toggle('collapsed');
+  });
+  (function(){
+    var cur = window.location.pathname;
+    document.querySelectorAll('.nav-item').forEach(function(el){
+      var href = el.getAttribute('href');
+      if (!href) return;
+      if (cur === href || (href !== '/' && cur.startsWith(href))) el.classList.add('active');
+    });
+  })();
+  function showToast(msg, type){
+    type = type || 'info';
+    var ct = document.getElementById('toastContainer');
+    var t = document.createElement('div');
+    t.className = 'toast toast-'+type;
+    t.textContent = msg;
+    ct.appendChild(t);
+    setTimeout(function(){ t.style.opacity='0'; setTimeout(function(){ t.remove(); },400); }, 3000);
+  }
+  // Auto-refresh system status
+  setInterval(function(){
+    fetch('/scenario/api/status').then(function(r){return r.json()}).then(function(d){
+      if (!d.ok) return;
+      var running = false;
+      var sc = d.scenarios.scenarios || {};
+      for (var k in sc) { if (sc[k].running) { running = true; break; } }
+      var el = document.getElementById('sysStatus');
+      if (running) { el.innerHTML = '&#9673; 攻击场景运行中'; el.style.color = '#e74c3c'; }
+      else { el.innerHTML = '&#9673; 系统就绪'; el.style.color = '#2ecc71'; }
+    }).catch(function(){});
+  }, 5000);
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

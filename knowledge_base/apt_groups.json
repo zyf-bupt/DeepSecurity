@@ -1,0 +1,66 @@
+{
+  "apt_groups": [
+    {
+      "id": "G0032",
+      "name": "Lazarus Group",
+      "aliases": ["Hidden Cobra", "ZINC", "Diamond Sleet", "APT38"],
+      "country": "North Korea",
+      "motivation": ["Espionage", "Financial Theft", "Destruction"],
+      "target_sectors": ["Government", "Financial", "Cryptocurrency", "Aerospace", "Defense"],
+      "signature_ttps": ["T1566.001", "T1059.001", "T1204.002", "T1547.001", "T1053.005", "T1620", "T1574.002", "T1003.001", "T1558.003", "T1021.002", "T1570", "T1573.001", "T1105", "T1055", "T1486", "T1041"],
+      "signature_malware": ["PondRAT", "ThemeForestRAT", "RemotePE", "Comebacker", "BlindingCan"],
+      "exploited_cves": ["CVE-2021-44228", "CVE-2022-26134"],
+      "notable_incident": "2025 Bybit $1.5B cryptocurrency heist via multi-signature wallet compromise",
+      "skill_level": "Advanced",
+      "attack_complexity": "High",
+      "description": "Lazarus Group is a North Korean state-sponsored APT group active since 2009. In 2025, signature malware includes PondRAT (fileless modular Trojan), ThemeForestRAT (LOLBin hollowing), and RemotePE (in-memory lateral movement). They employ reflective DLL injection, PowerShell stagers, and encrypted C2 channels."
+    },
+    {
+      "id": "G0016",
+      "name": "APT29 / Cozy Bear",
+      "aliases": ["The Dukes", "Nobelium", "Midnight Blizzard"],
+      "country": "Russia",
+      "motivation": ["Espionage", "Intellectual Property Theft"],
+      "target_sectors": ["Government", "Technology", "Defense", "Pharmaceutical", "Energy"],
+      "signature_ttps": ["T1195.002", "T1566", "T1059.001", "T1543.003", "T1003", "T1572", "T1573", "T1567.002", "T1090", "T1071.004"],
+      "signature_malware": ["Sunburst", "Teardrop", "Raindrop", "CosmicDuke", "WellMess"],
+      "exploited_cves": ["CVE-2020-4006", "CVE-2021-34527"],
+      "notable_incident": "SolarWinds supply chain attack (2020) impacting 18,000+ organizations, 6-12 month dwell time",
+      "skill_level": "Expert",
+      "attack_complexity": "Very High",
+      "description": "Russian SVR-linked group known for unprecedented supply chain attacks. Defining characteristic: strategic patience with long dwell times. Extensively uses DNS tunneling and encrypted C2 channels."
+    },
+    {
+      "id": "G0045",
+      "name": "APT41 / Wicked Panda",
+      "aliases": ["Double Dragon", "BARIUM", "Winnti Group", "Axiom"],
+      "country": "China",
+      "motivation": ["Espionage", "Financial Theft"],
+      "target_sectors": ["Technology", "Healthcare", "Telecommunications", "Gaming", "Government"],
+      "signature_ttps": ["T1190", "T1059", "T1059.006", "T1542.001", "T1046", "T1082", "T1105", "T1090", "T1102", "T1573", "T1003.003"],
+      "signature_malware": ["Deed RAT", "TOUGHPROGRESS", "PatoRAT", "Winnti", "PlugX"],
+      "exploited_cves": ["CVE-2022-26134", "CVE-2021-44228", "CVE-2017-9805"],
+      "notable_incident": "2025 exploitation targeting U.S. policy non-profit, using Google Calendar API as covert C2",
+      "skill_level": "Advanced",
+      "attack_complexity": "High",
+      "description": "Chinese dual-use threat group conducting both espionage and financial attacks. In 2025, signature tools include Deed RAT, TOUGHPROGRESS (Google Calendar C2), and PatoRAT. Aggressively exploits public-facing application vulnerabilities."
+    },
+    {
+      "id": "AI-ABUSE-001",
+      "name": "AI-Enhanced Threat Actor (Emerging)",
+      "aliases": ["GhostInTheMachine", "LLM-Stalker"],
+      "country": "Unknown",
+      "motivation": ["Espionage", "Automated Attack"],
+      "target_sectors": ["Technology", "Cloud Infrastructure", "AI/ML Systems"],
+      "signature_ttps": ["T1059", "T1059.006", "T1082", "T1046", "T1105", "T1090", "T1190", "T1587.001", "T1588.002"],
+      "signature_malware": ["LLM-Generated Payloads", "AI Autopilot Scripts", "Automated Exploit Chains"],
+      "exploited_cves": [],
+      "notable_incident": "MITRE 2025: AI-abuse activities moved from speculation to recorded, attributed events",
+      "skill_level": "Variable",
+      "attack_complexity": "Variable",
+      "description": "Emerging threat: attackers leveraging LLM Agents (Claude Code, OpenCode, CyberStrike-AI) for automated reconnaissance, code generation, and multi-path lateral exploration. Characterized by LLM-generated code with explanatory comments and trial-and-error path switching."
+    }
+  ],
+  "updated": "2026-07-07",
+  "sources": ["MITRE ATT&CK v18", "CyberStash 2025 Threat Analysis Report", "KELA Cyber Threat Intelligence 2025", "HiveForce Labs Weekly Threat Digest Nov 2025"]
+}

@@ -1,0 +1,28 @@
+{
+  "techniques": [
+    {"id": "T1566.001", "name": "Spearphishing Attachment", "tactic": "Initial Access", "description": "发送含有恶意附件的鱼叉邮件", "detection_patterns": ["suspicious_email_attachment", "macro_execution", "doc_with_powershell"]},
+    {"id": "T1189", "name": "Drive-by Compromise", "tactic": "Initial Access", "description": "通过水坑攻击获取初始访问", "detection_patterns": ["browser_exploit", "drive_by_download"]},
+    {"id": "T1190", "name": "Exploit Public-Facing Application", "tactic": "Initial Access", "description": "利用公网应用漏洞", "detection_patterns": ["web_exploit", "rce_vulnerability", "sql_injection"]},
+    {"id": "T1059", "name": "Command and Scripting Interpreter", "tactic": "Execution", "description": "利用命令行和脚本解释器执行恶意代码", "detection_patterns": ["powershell_execution", "cmd_execution", "bash_script", "python_script"]},
+    {"id": "T1059.001", "name": "PowerShell", "tactic": "Execution", "description": "利用PowerShell执行恶意代码", "detection_patterns": ["powershell -enc", "powershell -nop", "powershell -w hidden", "iex", "invoke-expression"]},
+    {"id": "T1059.004", "name": "Unix Shell", "tactic": "Execution", "description": "利用Unix Shell执行恶意命令", "detection_patterns": ["bash -c", "sh -c", "/bin/bash", "reverse_shell"]},
+    {"id": "T1047", "name": "Windows Management Instrumentation", "tactic": "Execution", "description": "利用WMI执行恶意代码", "detection_patterns": ["wmic", "wmi_exec", "WmiPrvSE"]},
+    {"id": "T1547.001", "name": "Registry Run Keys", "tactic": "Persistence", "description": "通过注册表Run键实现持久化", "detection_patterns": ["CurrentVersion\\Run", "registry_persistence"]},
+    {"id": "T1053.003", "name": "Cron", "tactic": "Persistence", "description": "通过Cron定时任务实现持久化", "detection_patterns": ["crontab", "/etc/cron", "cron_job"]},
+    {"id": "T1505.003", "name": "Web Shell", "tactic": "Persistence", "description": "部署Web Shell实现持久化访问", "detection_patterns": ["webshell", ".php_in_uploads", ".jsp_in_webroot", "cmd.php"]},
+    {"id": "T1055", "name": "Process Injection", "tactic": "Defense Evasion", "description": "进程注入以规避检测", "detection_patterns": ["dll_injection", "process_hollowing", "reflective_dll", "ptrace"]},
+    {"id": "T1070", "name": "Indicator Removal on Host", "tactic": "Defense Evasion", "description": "清除主机上的攻击痕迹", "detection_patterns": ["log_clear", "wevtutil cl", "rm -rf /var/log", "history -c"]},
+    {"id": "T1003.001", "name": "LSASS Memory", "tactic": "Credential Access", "description": "从LSASS进程内存中提取凭据", "detection_patterns": ["mimikatz", "lsass_dump", "procdump_lsass"]},
+    {"id": "T1003.008", "name": "OS Credential Dumping", "tactic": "Credential Access", "description": "操作系统凭据转储", "detection_patterns": ["/etc/shadow", "sam_dump", "ntds.dit"]},
+    {"id": "T1110", "name": "Brute Force", "tactic": "Credential Access", "description": "暴力破解认证", "detection_patterns": ["multiple_failed_login", "ssh_bruteforce", "rdp_bruteforce"]},
+    {"id": "T1082", "name": "System Information Discovery", "tactic": "Discovery", "description": "系统信息探测", "detection_patterns": ["whoami", "systeminfo", "ifconfig", "netstat", "uname -a"]},
+    {"id": "T1046", "name": "Network Service Scanning", "tactic": "Discovery", "description": "网络服务扫描", "detection_patterns": ["port_scan", "nmap", "masscan", "socket_scan"]},
+    {"id": "T1021.004", "name": "SSH", "tactic": "Lateral Movement", "description": "通过SSH横向移动", "detection_patterns": ["ssh_lateral", "sshpass", "ssh_tunnel"]},
+    {"id": "T1021.006", "name": "Windows Remote Management", "tactic": "Lateral Movement", "description": "通过WinRM横向移动", "detection_patterns": ["winrm", "psexec", "wmi_lateral"]},
+    {"id": "T1071.004", "name": "DNS Tunneling", "tactic": "Command and Control", "description": "通过DNS隧道进行C2通信", "detection_patterns": ["dns_tunnel", "long_dns_query", "high_entropy_dns"]},
+    {"id": "T1095", "name": "Non-Application Layer Protocol", "tactic": "Command and Control", "description": "使用非应用层协议进行C2", "detection_patterns": ["icmp_tunnel", "udp_tunnel", "raw_socket"]},
+    {"id": "T1041", "name": "Exfiltration Over C2 Channel", "tactic": "Exfiltration", "description": "通过C2通道外传数据", "detection_patterns": ["data_exfil", "large_outbound", "encrypted_exfil"]},
+    {"id": "T1048", "name": "Exfiltration Over Alternative Protocol", "tactic": "Exfiltration", "description": "通过替代协议外传数据", "detection_patterns": ["dns_exfil", "icmp_exfil", "http_post_exfil"]},
+    {"id": "T1486", "name": "Data Encrypted for Impact", "tactic": "Impact", "description": "加密数据造成破坏影响", "detection_patterns": ["ransomware", "file_encryption", "ransom_note"]}
+  ]
+}

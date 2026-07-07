@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block title %}攻击检测 — SecTrace{% endblock %}
+{% block page_title %}攻击行为检测仪表盘{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/detection.css') }}">{% endblock %}
+{% block content %}
+<div class="page-title">&#128270; 基于大模型的攻击行为检测 <small>LLM + RAG Enhanced · Multi-Source Data Fusion</small></div>
+
+<div class="row mb-3">
+  <div class="col-3"><div class="stat-card stat-red"><div class="stat-value" id="stat-high">0</div><div class="stat-label">高危告警</div></div></div>
+  <div class="col-3"><div class="stat-card stat-orange"><div class="stat-value" id="stat-medium">0</div><div class="stat-label">中危告警</div></div></div>
+  <div class="col-3"><div class="stat-card stat-cyan"><div class="stat-value" id="stat-low">0</div><div class="stat-label">低危告警</div></div></div>
+  <div class="col-3"><div class="stat-card stat-blue"><div class="stat-value" id="stat-events">0</div><div class="stat-label">分析事件总数</div></div></div>
+</div>
+
+<div class="row">
+  <div class="col-8">
+    <div class="card mb-3">
+      <div class="card-header">
+        <span>&#128276; 实时告警流 (Detection Results)</span>
+        <div class="d-flex gap-1">
+          <button class="btn btn-primary btn-sm" id="btnAnalyze" onclick="runFullAnalysis()">&#9654; 执行全管线分析</button>
+          <button class="btn btn-outline btn-sm" onclick="refreshAll()">&#8635; 刷新</button>
+        </div>
+      </div>
+      <div class="card-body" style="max-height:500px;overflow-y:auto" id="alertsBox">
+        <div class="text-center text-dim" style="padding:60px 20px">
+          <div style="font-size:48px;margin-bottom:12px">&#128270;</div>
+          <p style="font-weight:600">暂无告警数据</p>
+          <p style="font-size:12px">请先在「场景管理」启动攻击场景，再点击「执行全管线分析」</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card mb-3">
+      <div class="card-header">&#9776; MITRE ATT&CK 战术分布</div>
+      <div class="card-body" id="tacticDist"><div class="text-dim" style="font-size:12px">等待数据...</div></div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-header">&#128269; RAG 知识库检索</div>
+      <div class="card-body">
+        <div class="d-flex gap-1 mb-2">
+          <input class="field-input flex-1" id="ragQuery" placeholder="搜索攻击模式、TTP、APT组织..." style="font-size:12px">
+          <button class="btn btn-primary btn-sm" onclick="doRagSearch()">搜索</button>
+        </div>
+        <div id="ragResults"><div class="text-dim" style="font-size:11px">输入关键词检索 MITRE ATT&CK 知识库</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">&#9881; 检测引擎技术栈</div>
+      <div class="card-body" style="font-size:12px">
+        <div class="d-flex justify-between mb-1"><span>规则引擎</span><span class="badge badge-green">9条内置规则</span></div>
+        <div class="d-flex justify-between mb-1"><span>RAG知识增强</span><span class="badge badge-blue">37篇安全文档</span></div>
+        <div class="d-flex justify-between mb-1"><span>LLM深度分析</span><span class="badge badge-purple">Qwen-Flash</span></div>
+        <div class="d-flex justify-between mb-1"><span>数据源</span><span class="badge badge-cyan">3类 (日志+行为+流量)</span></div>
+        <div class="d-flex justify-between"><span>威胁建模</span><span class="badge badge-orange">MITRE ATT&CK v15</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Report Modal -->
+<div class="modal-overlay" id="reportModal">
+  <div class="modal-box">
+    <div class="modal-header"><div class="modal-title">&#128203; 综合分析报告</div><button class="modal-close" onclick="closeModal('reportModal')">&times;</button></div>
+    <div class="modal-body"><div class="pre-block" id="reportContent"></div></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-sm" onclick="copyReport()">&#128203; 复制报告</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('reportModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/detection.js') }}"></script>
+{% endblock %}

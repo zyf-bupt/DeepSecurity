@@ -1,0 +1,134 @@
+"""
+SQL Server + DataBridge fallback
+When pyodbc/SQL Server is unavailable, auto-degrades to in-memory DataBridge mode.
+"""
+import logging
+import re
+import json
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+try:
+    import pyodbc
+    from config import Config
+    _HAS_PYODBC = True
+except ImportError:
+    _HAS_PYODBC = False
+    logger.warning("pyodbc not installed, using in-memory DataBridge fallback")
+
+from utils.data_bridge import get_bridge
+
+
+def _get_conn(conn_str: str | None = None):
+    """Get pyodbc connection, or raise if unavailable"""
+    if not _HAS_PYODBC:
+        raise RuntimeError("pyodbc not installed")
+    cstr = conn_str or Config.SQL_CONN_STR
+    return pyodbc.connect(cstr, timeout=5)
+
+
+def _parse_table(sql: str) -> str:
+    """Extract table name from SQL"""
+    m = re.search(r'(?:FROM|INTO|UPDATE)\s+(?:dbo\.)?(\w+)', sql, re.IGNORECASE)
+    return m.group(1) if m else "unknown"
+
+
+def _parse_insert_values(sql: str, params: list) -> dict:
+    """Parse INSERT INTO ... VALUES and return {column: value} dict"""
+    bridge = get_bridge()
+    table = _parse_table(sql)
+
+    # Extract columns
+    cols_match = re.search(r'\((.*?)\)\s*VALUES', sql, re.IGNORECASE)
+    if not cols_match:
+        return {"_raw_sql": sql, "_params": str(params)}
+
+    cols = [c.strip() for c in cols_match.group(1).split(',')]
+    values = params or []
+
+    row = {}
+    for i, col in enumerate(cols):
+        if i < len(values):
+            row[col] = values[i]
+        else:
+            row[col] = None
+
+    row["id"] = len(bridge._memory_store.get(table, [])) + 1
+    row["create_time"] = str(row.get("create_time") or datetime.now().isoformat())
+    return {"_table": table, "_row": row}
+
+
+def execute(sql: str, params=None, conn_str: str | None = None) -> int:
+    """
+    Execute INSERT/UPDATE/DELETE. Tries SQL Server first, falls back to DataBridge.
+    Returns affected row count.
+    """
+    try:
+        conn = _get_conn(conn_str)
+        cursor = conn.cursor()
+        cursor.execute(sql, params or [])
+        conn.commit()
+        affected = cursor.rowcount
+        cursor.close()
+        conn.close()
+        return affected
+    except Exception as e:
+        logger.warning("SQL Server execute failed, using DataBridge: %s", e)
+        bridge = get_bridge()
+        parsed = _parse_insert_values(sql, params or [])
+        table = parsed.pop("_table", "unknown")
+        row = parsed.pop("_row", parsed)
+        bridge.insert(table, row)
+        return 1
+
+
+def fetch_one(sql: str, params=None, conn_str: str | None = None) -> dict | None:
+    """Fetch one row. Tries SQL Server first, falls back to DataBridge."""
+    try:
+        conn = _get_conn(conn_str)
+        cursor = conn.cursor()
+        cursor.execute(sql, params or [])
+        columns = [col[0] for col in cursor.description]
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if row:
+            return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.warning("SQL Server fetch_one failed, using DataBridge: %s", e)
+        bridge = get_bridge()
+        table = _parse_table(sql)
+        limit = 1
+        rows = bridge.query(table, limit=limit)
+        return rows[0] if rows else None
+
+
+def fetch_all(sql: str, params=None, conn_str: str | None = None) -> list[dict]:
+    """Fetch all rows. Tries SQL Server first, falls back to DataBridge."""
+    try:
+        conn = _get_conn(conn_str)
+        cursor = conn.cursor()
+        cursor.execute(sql, params or [])
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    except Exception as e:
+        logger.warning("SQL Server fetch_all failed, using DataBridge: %s", e)
+        bridge = get_bridge()
+        table = _parse_table(sql)
+        m = re.search(r'TOP\s*[\(\s]*(\d+)', sql, re.IGNORECASE)
+        if m:
+            limit = int(m.group(1))
+        else:
+            m = re.search(r'FETCH NEXT\s+(\d+)', sql, re.IGNORECASE)
+            limit = int(m.group(1)) if m else 2000
+        return bridge.query(table, limit=limit)
+
+
+if __name__ == "__main__":
+    print("Test db connect:", fetch_one("SELECT DB_NAME() AS db_name"))
+    print("Test traffic query:", fetch_one("SELECT TOP 1 * FROM dbo.NetworkTraffic ORDER BY create_time DESC"))

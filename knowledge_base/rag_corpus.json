@@ -1,0 +1,60 @@
+{
+  "corpus": [
+    {
+      "id": "rag_001",
+      "category": "apt_behavior",
+      "title": "APT Attack Chain Characteristics",
+      "content": "APT attacks follow Reconnaissance->Weaponization->Delivery->Exploitation->Installation->C2->Actions lifecycle. Initial access via spearphishing(T1566) or public app exploit(T1190). After installation, credential dumping(T1003) for privilege escalation, lateral movement via SSH(T1021.004) or WMI(T1047). C2 uses DNS tunneling(T1071.004) or HTTPS. Data exfiltration(T1048) uses encrypted segmented transfers. APT groups maintain long-term persistence(T1547/T1053).",
+      "keywords": ["APT", "kill_chain", "reconnaissance", "lateral_movement", "C2", "exfiltration", "persistence"]
+    },
+    {
+      "id": "rag_002",
+      "category": "dns_tunneling",
+      "title": "DNS Tunneling Detection",
+      "content": "DNS tunneling(T1071.004) detection: 1) Long DNS queries(>50 chars); 2) High subdomain entropy(>4.5); 3) Abnormal query frequency; 4) TXT/MX record abuse; 5) Abnormal response sizes. Attackers use DNS tunnels to bypass firewalls. Common tools: dnscat2, iodine, DNSteal.",
+      "keywords": ["DNS", "tunneling", "covert_channel", "entropy", "dnscat2", "iodine", "T1071.004"]
+    },
+    {
+      "id": "rag_003",
+      "category": "credential_dumping",
+      "title": "Credential Dumping Detection",
+      "content": "Credential dumping(T1003) detection: 1) Monitor LSASS access(Event 4663); 2) Detect mimikatz/procdump execution; 3) Monitor /etc/shadow reads on Linux; 4) Monitor SAM registry access(HKLM\\SAM\\SAM); 5) Memory dump files in Temp. Successful detection correlates to lateral movement.",
+      "keywords": ["credential_dumping", "mimikatz", "lsass", "shadow", "T1003", "pass_the_hash", "kerberoasting"]
+    },
+    {
+      "id": "rag_004",
+      "category": "ai_agent_abuse",
+      "title": "LLM Agent Abuse Detection Patterns",
+      "content": "AI agent abuse detection: 1) Abnormal command patterns - explore-and-exploit cycles (whoami/ifconfig recon then multiple attack attempts); 2) Code generation traits - LLM-style patterns (detailed comments, imperfect error handling, logic redundancy); 3) Rate anomalies - faster than human with trial-and-error path switching; 4) Agent toolchain traits - curl/wget download + python/bash execution + file read/write combos; 5) LLM reasoning traces in logs (explanation comments). Key: Agent behavior is purposeful but non-human rhythm, command intervals much shorter than human operators.",
+      "keywords": ["LLM", "agent", "AI_abuse", "autonomous", "explore_exploit", "code_generation", "Claude_Code", "OpenCode", "tool_abuse"]
+    },
+    {
+      "id": "rag_005",
+      "category": "lateral_movement",
+      "title": "Lateral Movement Detection Strategy",
+      "content": "Lateral movement detection core: multi-hop attack chain identification. 1) Logon analysis - Event 4624 LogonType=3 with source IP from internal hosts; 2) Process chain - wmic.exe/psexec.exe/powershell.exe launched by non-user processes; 3) Temporal correlation - same user logging from multiple hosts in short time; 4) Service creation - Event 7045 with file write; 5) Scheduled task creation - Event 4698 with lateral source. Lateral movement typically follows credential dump and precedes C2/data collection.",
+      "keywords": ["lateral_movement", "psexec", "wmi", "ssh", "logon_type_3", "T1021", "pass_the_hash", "golden_ticket"]
+    },
+    {
+      "id": "rag_006",
+      "category": "ransomware",
+      "title": "Ransomware Attack Characteristics",
+      "content": "Ransomware lifecycle: 1) Initial access(T1566/T1190); 2) Persistence and privilege escalation(T1547/T1053/T1003); 3) Defense evasion(T1070/T1562) - disable security, delete Shadow Copies(vssadmin delete shadows); 4) Lateral movement(T1021); 5) Data collection and encryption(T1486) - exfiltrate then encrypt (double extortion); 6) Ransom note - create README/DECRYPT files. Key detection: mass file rename operations, vssadmin/shadow copy deletion, abnormal encryption API patterns.",
+      "keywords": ["ransomware", "encryption", "shadow_copy", "double_extortion", "T1486", "vssadmin", "ransom_note"]
+    },
+    {
+      "id": "rag_007",
+      "category": "log_analysis",
+      "title": "Multi-Source Log Correlation",
+      "content": "Effective attack detection requires multi-source log correlation: 1) Host logs(Windows Event Log/Linux Auditd) - user logins, process creation, privilege changes; 2) Network traffic logs - connections, protocol usage, data volume anomalies; 3) Endpoint behavior(Sysmon/Falco) - fine-grained process behavior, file ops, registry, syscalls. Correlation method: timestamp alignment with clock skew consideration, using (IP, PID, Timestamp) as bridge across sources. Example: NetFlow suspicious external IP -> Sysmon process -> Security Log user -> complete trace path.",
+      "keywords": ["log_correlation", "multi_source", "Sysmon", "NetFlow", "auditd", "event_correlation", "provenance"]
+    },
+    {
+      "id": "rag_008",
+      "category": "mitre_attack",
+      "title": "MITRE ATT&CK Framework Guide",
+      "content": "MITRE ATT&CK organizes attack behaviors into 14 Tactics and hundreds of Techniques. Threat modeling steps: 1) Data source mapping - which logs/sensors cover which techniques; 2) TTP extraction - extract TTP IDs from detected anomalies; 3) Attack chain construction - sort TTPs by tactic phase; 4) Group attribution - compare TTP profiles against known APT groups. Key technique IDs: T1059(Execution), T1003(Credential Dump), T1021(Lateral Movement), T1071(C2), T1041(Exfiltration). Framework standardizes attack description language for interoperability.",
+      "keywords": ["MITRE", "ATT&CK", "TTP", "tactic", "technique", "threat_modeling", "framework"]
+    }
+  ]
+}

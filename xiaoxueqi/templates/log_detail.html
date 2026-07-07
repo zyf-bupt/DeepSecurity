@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+
+{% block title %}日志详情 - 攻击溯源分析系统{% endblock %}
+
+{% block content %}
+
+  <h2>日志详情</h2>
+  <p>展示单条日志的归一化字段（result）与完整日志内容（content）。</p>
+
+  <a href="{{ url_for('logs.list_logs') }}">返回列表</a>
+
+  <h3>日志 #{{ log.id }}</h3>
+
+  <table>
+    <tbody>
+      <tr><th>时间戳</th><td>{{ log.timestamp }}</td></tr>
+      <tr><th>主机</th><td>{{ log.hostname }}</td></tr>
+      <tr><th>事件ID</th><td>{{ log.event_id }}</td></tr>
+      <tr><th>级别</th><td>{{ log.level }}</td></tr>
+      <tr><th>消息</th><td>{{ log.message }}</td></tr>
+    </tbody>
+  </table>
+
+  <h4>归一化结果（result）</h4>
+  <pre>{{ log.result_json_pretty }}</pre>
+
+  <h4>完整日志（content）</h4>
+  <pre>{{ log.raw_log }}</pre>
+
+{% endblock %}

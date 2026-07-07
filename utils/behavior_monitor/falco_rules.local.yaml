@@ -1,0 +1,105 @@
+# ==============================================================================
+# HostGuard XDR - Python-Aligned Rules (Strict String Matching)
+# ==============================================================================
+
+# [1] 进程链基础数据
+# 对应 Python 兜底逻辑 -> PROCESS_CREATE
+- rule: HostGuard Process Chain
+  desc: Trace shell execution
+  condition: >
+    spawned_process and 
+    (proc.name in (bash, sh, zsh, dash, ls, ps, whoami, id, sudo, su, python, python3)) and
+    proc.name != falco
+  output: "Process spawned: %proc.name (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: INFO
+  tags: [hostguard]
+
+# [2] 异常父子进程
+# 对应 Python: if "Abnormal" in output
+- rule: HostGuard Abnormal Parent
+  desc: Detect script spawning shell
+  condition: >
+    spawned_process and 
+    (proc.pname in (python, python3, perl, ruby, php)) and 
+    (proc.name in (bash, sh, zsh, dash))
+  output: "Abnormal shell parent: (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline parent=%proc.pname)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [3] 文件创建
+# 对应 Python: if "File creation" in output
+- rule: HostGuard File Creation
+  desc: Detect file creation
+  condition: >
+    evt.type in (open, openat, creat) and evt.dir = < and fd.name != "" and
+    (fd.name endswith .txt or fd.name endswith .php or fd.name endswith .py or fd.name endswith .sh or fd.name endswith .conf or fd.name endswith .log) and
+    proc.name != falco
+  # [重点修改] 这里的字符串严格匹配 Python 的 elif "File creation" in output
+  output: "File creation detected: %fd.name (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [4] 文件修改
+# 对应 Python: if "File modification" in output
+- rule: HostGuard File Modification
+  desc: Detect modification
+  condition: >
+    spawned_process and 
+    (proc.name = chmod or (proc.cmdline contains "echo" and (proc.cmdline contains ">" or proc.cmdline contains "tee")))
+  # [重点修改] 匹配 Python 的 elif "File modification" in output
+  output: "File modification detected: (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [5] 文件删除
+# 对应 Python: if "File deletion" in output
+- rule: HostGuard File Deletion
+  desc: Detect deletion
+  condition: spawned_process and proc.name = rm
+  # [重点修改] 匹配 Python 的 elif "File deletion" in output
+  output: "File deletion detected: (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [6] 敏感读取
+# 对应 Python: if "Sensitive" in output
+- rule: HostGuard Sensitive Read
+  desc: Detect shadow access
+  condition: (evt.type = open or evt.type = openat) and fd.name in (/etc/shadow, /etc/passwd, /etc/sudoers) and evt.dir = <
+  output: "Sensitive file access detected: %fd.name (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [7] 网络工具
+# 对应 Python: if "Network" in output
+- rule: HostGuard Network Tool
+  desc: Detect network tools
+  condition: spawned_process and (proc.name in (nc, ncat, netcat, curl, wget, ping, nmap))
+  output: "Network tool execution: %proc.name (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+  tags: [hostguard]
+
+# [8] 内存注入
+# 对应 Python: if "PTRACE" in output
+- rule: HostGuard Ptrace Injection
+  desc: Detect ptrace
+  condition: evt.type = ptrace and evt.dir = > and proc.name != strace and proc.name != gdb
+  output: "Detected ptrace PTRACE_ATTACH attempt: (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [hostguard]
+
+# ==============================================================================
+# [新增] 内存行为分析 - 反射加载 (Reflective Loading / Fileless)
+# ==============================================================================
+# 原理：检测进程的可执行文件路径是否指向 memfd (内存匿名文件)
+# 对应：内存行为分析 - 反射加载
+- rule: HG_REFLECTIVE_INJECTION
+  desc: Detect binary executed from memory (memfd)
+  condition: >
+    spawned_process and 
+    proc.is_exe_from_memfd=true and 
+    proc.name != runc and 
+    proc.name != falco
+  output: "HG_REFLECTIVE_INJECTION: (pid=%proc.pid ppid=%proc.ppid user=%user.name command=%proc.cmdline)"
+  priority: CRITICAL
+  tags: [hostguard]

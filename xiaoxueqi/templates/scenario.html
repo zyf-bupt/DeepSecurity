@@ -1,0 +1,102 @@
+{% extends "layout.html" %}
+{% block title %}场景管理 — SecTrace{% endblock %}
+{% block page_title %}攻击场景生成与管理{% endblock %}
+{% block content %}
+<div class="page-title">&#9878; 攻击场景生成与管理 <small>2个分析场景 · 真实数据生成 · 全管线联动</small></div>
+
+<div class="row mb-3">
+  <div class="col-6">
+    <div class="card" style="border-top:4px solid var(--red)">
+      <div class="card-header"><span>&#128308; 场景一：APT全链条攻击</span><span class="badge badge-red" id="badgeApt">就绪</span></div>
+      <div class="card-body" style="font-size:13px">
+        <p class="text-dim mb-2">模拟 Lazarus Group 风格 APT 攻击，覆盖完整杀伤链的 8 个阶段</p>
+        <div class="d-flex gap-1 flex-wrap mb-2">
+          <span class="badge badge-red">T1190 公网利用</span><span class="badge badge-orange">T1105 工具下载</span>
+          <span class="badge badge-blue">T1059 命令执行</span><span class="badge badge-purple">T1547 持久化</span>
+          <span class="badge badge-red">T1003 凭据窃取</span><span class="badge badge-orange">T1046 端口扫描</span>
+          <span class="badge badge-red">T1021 横向移动</span><span class="badge badge-red">T1047 WMI</span>
+          <span class="badge badge-orange">T1071 DNS隧道</span><span class="badge badge-red">T1095 ICMP隧道</span>
+          <span class="badge badge-orange">T1048 数据外传</span><span class="badge badge-purple">T1070 痕迹清除</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.8">
+          <strong>攻击路径:</strong> 外部C2(45.33.22.11) → DMZ Web(192.168.86.10) → 跳板机(192.168.86.132) → Linux核心(192.168.86.130) → Windows域控(192.168.86.131) → C2外传
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="progress mb-2"><div class="progress-bar red" id="progApt" style="width:0%"></div></div>
+        <div class="d-flex gap-1 items-center">
+          <button class="btn btn-danger btn-sm" onclick="startScenario('apt_full_chain')">&#9654; 启动</button>
+          <button class="btn btn-warning btn-sm" onclick="stopScenario('apt_full_chain')">&#9632; 停止</button>
+          <small class="text-dim flex-1" id="stageApt"></small>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6">
+    <div class="card" style="border-top:4px solid var(--purple)">
+      <div class="card-header"><span>&#128309; 场景二：AI智能体滥用攻击</span><span class="badge badge-purple" id="badgeAi">就绪</span></div>
+      <div class="card-body" style="font-size:13px">
+        <p class="text-dim mb-2">模拟利用 Claude Code / OpenCode 等 LLM Agent 发起的自动化攻击</p>
+        <div class="d-flex gap-1 flex-wrap mb-2">
+          <span class="badge badge-purple">AI自主侦察</span><span class="badge badge-blue">LLM代码生成</span>
+          <span class="badge badge-cyan">工具链滥用</span><span class="badge badge-purple">试错路径切换</span>
+          <span class="badge badge-red">AI供应链</span><span class="badge badge-orange">模型污染</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.8">
+          <strong>攻击特征:</strong> LLM Agent在开发者工作站启动 → AI自主发现内网资产 → LLM生成攻击载荷(带注释+试错) → 多路径横向探索 → AI模型注册表渗透 → 通过AI基础设施外传
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="progress mb-2"><div class="progress-bar purple" id="progAi" style="width:0%"></div></div>
+        <div class="d-flex gap-1 items-center">
+          <button class="btn btn-purple btn-sm" onclick="startScenario('ai_agent_abuse')">&#9654; 启动</button>
+          <button class="btn btn-warning btn-sm" onclick="stopScenario('ai_agent_abuse')">&#9632; 停止</button>
+          <small class="text-dim flex-1" id="stageAi"></small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span>&#128200; 实时事件流 (Real-time Event Stream)</span>
+    <div class="d-flex gap-1">
+      <button class="btn btn-outline btn-sm" onclick="clearAllData()">&#128465; 清除全部</button>
+      <button class="btn btn-outline btn-sm" onclick="refreshEvents()">&#8635; 刷新</button>
+    </div>
+  </div>
+  <div class="card-body" style="padding:0;max-height:380px;overflow-y:auto">
+    <div class="table-wrap"><table class="table-sticky">
+      <thead><tr><th>时间</th><th>数据源</th><th>事件类型</th><th>主机</th><th>进程/详情</th></tr></thead>
+      <tbody id="eventsBody"><tr><td colspan="5"><div class="text-center text-dim" style="padding:40px">等待场景生成事件...</div></td></tr></tbody>
+    </table></div>
+  </div>
+</div>
+
+<script>
+var pollTimer=null;
+function startPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(pollStatus,2000)}
+function pollStatus(){
+  fetch('/scenario/api/status').then(function(r){return r.json()}).then(function(d){
+    if(!d.ok)return;var sc=d.scenarios.scenarios||{};
+    updateUI('apt','apt_full_chain',sc);updateUI('ai','ai_agent_abuse',sc);
+  }).catch(function(){});
+  fetch('/scenario/api/events?limit=30').then(function(r){return r.json()}).then(function(d){
+    if(!d.data||!d.data.length)return;
+    document.getElementById('eventsBody').innerHTML=d.data.reverse().slice(0,30).map(function(e){
+      return'<tr><td><code>'+ (e.timestamp||'').substring(11,19) +'</code></td><td><span class="badge badge-gray">'+ (e.data_source||'') +'</span></td><td>'+ (e.event_type||'') +'</td><td><code>'+ (e.host_ip||'') +'</code></td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+ ((e.entities||{}).command_line||'') +'">'+ ((e.entities||{}).process_name||(e.entities||{}).command_line||'').substring(0,65) +'</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function updateUI(t,id,sc){var s=sc[id];if(!s)return;
+  document.getElementById('badge'+t.charAt(0).toUpperCase()+t.slice(1)).textContent=s.running?'运行中':(s.progress===100?'已完成':'就绪');
+  document.getElementById('prog'+t.charAt(0).toUpperCase()+t.slice(1)).style.width=(s.progress||0)+'%';
+  document.getElementById('stage'+t.charAt(0).toUpperCase()+t.slice(1)).textContent=s.current_stage||'';}
+function startScenario(id){fetch('/scenario/api/scenarios/'+id+'/start',{method:'POST'}).then(function(r){return r.json()}).then(function(d){showToast(d.message||'OK',d.ok?'success':'error');startPolling();});}
+function stopScenario(id){fetch('/scenario/api/scenarios/'+id+'/stop',{method:'POST'}).then(function(r){return r.json()}).then(function(d){showToast(d.message||'OK',d.ok?'success':'error');});}
+function clearAllData(){if(!confirm('确定清除所有数据？'))return;fetch('/scenario/api/clear',{method:'POST'}).then(function(r){return r.json()}).then(function(d){showToast(d.message||'Done','info');refreshEvents();});}
+function refreshEvents(){pollStatus();}
+startPolling();
+</script>
+{% endblock %}

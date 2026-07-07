@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}溯源归因 — SecTrace{% endblock %}
+{% block page_title %}攻击溯源归因分析{% endblock %}
+{% block content %}
+<div class="page-title">&#9879; 攻击溯源归因分析 <small>TAA-EPLMR 证据路径推理 + 威胁情报融合</small></div>
+
+<div class="row">
+  <div class="col-8">
+    <div class="card mb-3">
+      <div class="card-header"><span>&#128203; 归因分析报告</span>
+        <button class="btn btn-primary btn-sm" id="btnGenReport" onclick="generateReport()">&#8635; 生成最新报告</button>
+      </div>
+      <div class="card-body" style="max-height:620px;overflow-y:auto">
+        <div class="pre-block" id="reportBox">
+          <div class="text-center text-dim" style="padding:60px 20px">
+            <div style="font-size:48px;margin-bottom:12px">&#9879;</div>
+            <p style="font-weight:600">暂无归因分析报告</p>
+            <p style="font-size:12px">请先到「攻击检测」页面执行<strong>全管线分析</strong>，或点击上方按钮直接生成</p>
+            <button class="btn btn-primary mt-2" onclick="generateReport()">&#9654; 立即生成报告</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card mb-3">
+      <div class="card-header">&#127919; 归因摘要</div>
+      <div class="card-body" id="attrSummary" style="font-size:13px"><div class="text-dim">暂无归因数据 — 请生成报告</div></div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-header">&#127758; 已知APT组织档案</div>
+      <div class="card-body" style="padding:0;max-height:260px;overflow-y:auto" id="aptList"><div style="padding:20px" class="text-dim">加载中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header">&#9888; 威胁等级评估</div>
+      <div class="card-body text-center" id="threatBox"><div class="text-dim">暂无评估</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function generateReport(){
+  var box=document.getElementById('reportBox'),btn=document.getElementById('btnGenReport');
+  box.innerHTML='<div class="text-center" style="padding:50px"><div class="pulse" style="font-size:36px">&#9881;</div><p class="text-dim mt-2">执行 检测→捕获→溯源 全管线分析中...</p></div>';
+  btn.disabled=true;btn.textContent='分析中...';
+  fetch('/detection/api/analyze',{method:'POST'}).then(function(r){return r.json()}).then(function(d){
+    btn.disabled=false;btn.textContent='&#8635; 生成最新报告';
+    if(!d.ok){box.innerHTML='<div class="alert alert-red">错误: '+(d.error||'分析失败')+'</div>';return;}
+    box.textContent=d.data.report||'(报告为空)';updateSidebar(d.data);showToast('报告生成完成!','success');
+  }).catch(function(e){btn.disabled=false;btn.textContent='&#8635; 生成最新报告';box.innerHTML='<div class="alert alert-red">请求失败: '+e.message+'</div>';});
+}
+function updateSidebar(data){
+  var attr=(data.attribution||{}).attribution||{},result=attr.result||{};
+  var profile=data.profile||{},ident=profile.identity||{},cap=profile.capability||{};
+  var threat=profile.threat_rating||{},lvl=threat.level||'N/A';
+  var lc=lvl==='CRITICAL'?'red':(lvl==='HIGH'?'orange':(lvl==='MEDIUM'?'cyan':'green'));
+  document.getElementById('attrSummary').innerHTML=
+    '<div class="mb-1"><strong>归因类型:</strong> <span class="badge badge-blue">'+ (attr.type||'N/A') +'</span></div>'+
+    '<div class="mb-1"><strong>最佳匹配:</strong> <span style="font-weight:700">'+ (result.best_match||'N/A') +'</span></div>'+
+    '<div class="mb-1"><strong>置信度:</strong> <span style="font-weight:700;color:var(--primary)">'+ ((attr.overall_confidence||0)*100).toFixed(0) +'%</span></div>'+
+    '<div class="mb-1"><strong>技能水平:</strong> '+ (cap.skill_level||'N/A') +'</div>'+
+    '<div class="mb-1"><strong>攻击复杂度:</strong> '+ (cap.attack_complexity||'N/A') +'</div>'+
+    '<hr style="border-color:var(--border)">'+
+    '<div class="mb-1">检测告警: <strong>'+ (data.detection?data.detection.alerts_count:0) +'</strong></div>'+
+    '<div>验证攻击链: <strong>'+ (data.capture?data.capture.chains_count:0) +'</strong></div>';
+  document.getElementById('threatBox').innerHTML=
+    '<div style="font-size:52px;font-weight:800;color:var(--'+lc+');line-height:1">'+ (threat.score||0) +'<span style="font-size:18px;color:var(--text-dim)">/10</span></div>'+
+    '<span class="badge badge-'+lc+'" style="font-size:14px;padding:6px 18px;margin-top:8px">'+lvl+'</span>';
+}
+fetch('/attribution/api/apt/groups').then(function(r){return r.json()}).then(function(d){
+  if(!d.ok)return;(d.data.apt_groups||[]).forEach(function(g){
+    var div=document.createElement('div');
+    div.style.cssText='padding:12px 16px;border-bottom:1px solid var(--border)';
+    div.innerHTML='<strong>'+g.name+'</strong> <span class="badge badge-gray">'+ (g.country||'') +'</span><div style="font-size:11px;color:var(--text-dim);margin-top:4px">别名: '+ (g.aliases||[]).slice(0,3).join(', ') +'</div><div style="font-size:11px;color:var(--text-dim)">TTP: '+ (g.signature_ttps||[]).slice(0,5).join(', ') +'</div>';
+    document.getElementById('aptList').appendChild(div);
+  });
+  document.getElementById('aptList').querySelector('.text-dim')?.remove();
+});
+</script>
+{% endblock %}
