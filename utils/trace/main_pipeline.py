@@ -299,6 +299,39 @@ def multi_source_llm_analysis(time_start: str = "", time_end: str = "") -> dict:
     bridge = get_bridge()
     mapper = ATTACKMapper(ATTACK_RULES_FILE)
 
+    def _attach_source_meta(event: dict, *, table: str, row_id, event_hash, host_name, event_time) -> dict:
+        enriched = dict(event or {})
+        source_name = {
+            "HostLogs": "host_log",
+            "HostBehaviors": "host_behavior",
+            "NetworkTraffic": "network_traffic",
+        }.get(table, enriched.get("data_source", "host_behavior"))
+        enriched.setdefault("data_source", source_name)
+        enriched.setdefault("source_table", table)
+        enriched.setdefault("source_record_id", row_id)
+        enriched.setdefault("event_hash", event_hash)
+        enriched.setdefault("host_name", host_name)
+        enriched.setdefault("timestamp", event_time or enriched.get("timestamp"))
+        return enriched
+
+    def _normalize_alerts(matches: list[dict], report_id: str) -> list[dict]:
+        alerts: list[dict] = []
+        for idx, match in enumerate(matches, start=1):
+            tech = match.get("technique", {})
+            tactic = match.get("tactic", {})
+            confidence = float(match.get("confidence", 0.5) or 0.5)
+            alerts.append({
+                "rule_id": f"{report_id}-T{idx}",
+                "technique_id": str(tech.get("id", "")) if isinstance(tech, dict) else str(tech),
+                "technique_name": str(tech.get("name", "")) if isinstance(tech, dict) else str(tech),
+                "tactic": str(tactic.get("name", "")) if isinstance(tactic, dict) else str(tactic),
+                "severity": "high" if confidence >= 0.8 else ("medium" if confidence >= 0.5 else "low"),
+                "confidence": confidence,
+                "description": str(match.get("description", "")),
+                "source": "rule_based",
+            })
+        return alerts
+
     # 1) Collect events from all 3 sources (SQL Server + DataBridge + scenario)
     all_events = bridge.get_all_events()
     try:
@@ -314,16 +347,34 @@ def multi_source_llm_analysis(time_start: str = "", time_end: str = "") -> dict:
         from utils.winlog.storage.hostlogs_sqlserver import list_hostlogs, parse_result_json as _prj3
 
         for row in list_hostbehaviors(offset=0, limit=2000, host_name=None):
-            ev = _prj2(row.result)
-            ev["data_source"] = "host_behavior"
+            ev = _attach_source_meta(
+                _prj2(row.result),
+                table="HostBehaviors",
+                row_id=row.id,
+                event_hash=row.event_hash,
+                host_name=row.host_name,
+                event_time=row.event_time_utc or row.create_time,
+            )
             all_events.append(ev)
         for row in list_networktraffic(offset=0, limit=2000, host_name=None):
-            ev = _prj(row.result)
-            ev["data_source"] = "network_traffic"
+            ev = _attach_source_meta(
+                _prj(row.result),
+                table="NetworkTraffic",
+                row_id=row.id,
+                event_hash=row.event_hash,
+                host_name=row.host_name,
+                event_time=row.event_time_utc or row.create_time,
+            )
             all_events.append(ev)
         for row in list_hostlogs(offset=0, limit=2000, host_name=None):
-            ev = _prj3(row.result)
-            ev["data_source"] = "host_log"
+            ev = _attach_source_meta(
+                _prj3(row.result),
+                table="HostLogs",
+                row_id=row.id,
+                event_hash=row.event_hash,
+                host_name=row.host_name,
+                event_time=getattr(row, "event_time_utc", None) or row.create_time,
+            )
             all_events.append(ev)
         logging.info("[multi-source] SQL Server: %d total events after merge", len(all_events))
     except Exception as e:
@@ -457,6 +508,33 @@ def multi_source_llm_analysis(time_start: str = "", time_end: str = "") -> dict:
         "created_at": now,
     }
 
+    evidence_case = None
+    try:
+        from utils.capture.agent_framework import get_capture_framework
+        from utils.evidence import create_evidence_case
+
+        capture_result = get_capture_framework().run(all_events, _normalize_alerts(unique_matches, report_id))
+        capture_result["verdict"]["verdict_id"] = report_id
+        capture_result["verdict"]["iocs"] = {
+            "ips": iocs,
+            "domains": [],
+            "processes": [],
+            "file_hashes": [],
+            "techniques": [
+                str((m.get("technique", {}) or {}).get("id", ""))
+                for m in unique_matches
+                if str((m.get("technique", {}) or {}).get("id", ""))
+            ],
+        }
+        evidence_case = create_evidence_case(
+            verdict=capture_result["verdict"],
+            chains=capture_result["chains"],
+            evidence=capture_result["evidence"],
+            report=report["report_json"],
+        )
+    except Exception as exc:
+        logging.warning("[multi-source] Evidence package generation skipped: %s", exc)
+
     # Save to DataBridge
     bridge._memory_store.setdefault("AnalysisReports", [])
     bridge._memory_store["AnalysisReports"] = [
@@ -529,6 +607,8 @@ def multi_source_llm_analysis(time_start: str = "", time_end: str = "") -> dict:
             "created_at": str(report.get("created_at", "")),
         },
     }
+    if evidence_case:
+        result["evidence_case"] = evidence_case
     return result
 
 
