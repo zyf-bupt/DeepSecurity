@@ -141,7 +141,7 @@ def execute(sql: str, params=None, conn_str: str | None = None) -> int:
         conn.close()
         return affected
     except Exception as e:
-        logger.warning("SQL Server execute failed, using DataBridge: %s", e)
+        logger.debug("SQL Server execute failed, using DataBridge: %s", e)
         bridge = get_bridge()
         parsed = _parse_insert_values(sql, params or [])
         table = parsed.pop("_table", "unknown")
@@ -164,7 +164,7 @@ def fetch_one(sql: str, params=None, conn_str: str | None = None) -> dict | None
             return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.warning("SQL Server fetch_one failed, using DataBridge: %s", e)
+        logger.debug("SQL Server fetch_one failed, using DataBridge: %s", e)
         bridge = get_bridge()
         p = params or []
         table = _parse_table(sql)
@@ -187,7 +187,7 @@ def fetch_all(sql: str, params=None, conn_str: str | None = None) -> list[dict]:
         conn.close()
         return [dict(zip(columns, row)) for row in rows]
     except Exception as e:
-        logger.warning("SQL Server fetch_all failed, using DataBridge: %s", e)
+        logger.debug("SQL Server fetch_all failed, using DataBridge: %s", e)
         bridge = get_bridge()
         p = params or []
         table = _parse_table(sql)

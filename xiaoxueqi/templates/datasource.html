@@ -1,0 +1,324 @@
+{% extends "layout.html" %}
+{% block title %}数据源状态 - SecTrace{% endblock %}
+
+{% block extra_css %}
+<style>
+.datasource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.datasource-card {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius, 8px);
+  padding: 20px;
+  box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.08));
+  transition: box-shadow 0.2s;
+}
+.datasource-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.source-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.source-name {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--text, #1a1a2e);
+}
+.source-category {
+  font-size: 0.75em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cat-host-log     { background: var(--purple, #7c3aed); }
+.cat-host-behavior { background: var(--cyan, #06b6d4); }
+.cat-network       { background: var(--orange, #f59e0b); }
+.cat-unknown       { background: #888; }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-healthy  .status-dot { background: var(--green, #10b981); }
+.status-warning  .status-dot { background: var(--orange, #f59e0b); }
+.status-error    .status-dot { background: var(--red, #ef4444); }
+.status-unknown  .status-dot { background: #888; }
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 0.88em;
+  color: #555;
+}
+.stat-row .label { color: #888; }
+.stat-row .value { font-weight: 500; color: var(--text, #333); }
+.stat-row .value.error-count { color: var(--red, #ef4444); }
+
+.summary-bar {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: var(--radius, 8px);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.summary-item {
+  text-align: center;
+}
+.summary-item .num {
+  font-size: 1.5em;
+  font-weight: 700;
+  color: var(--primary, #3b82f6);
+}
+.summary-item .lbl {
+  font-size: 0.78em;
+  color: #888;
+}
+.summary-item.healthy .num { color: var(--green, #10b981); }
+.summary-item.warning .num { color: var(--orange, #f59e0b); }
+.summary-item.error   .num { color: var(--red, #ef4444); }
+
+.action-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 0.85em;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+.btn-primary { background: var(--primary, #3b82f6); color: #fff; }
+.btn-primary:hover { opacity: 0.9; }
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--primary, #3b82f6);
+  color: var(--primary, #3b82f6);
+}
+.btn-outline:hover { background: var(--primary, #3b82f6); color: #fff; }
+.btn-load {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.card-desc {
+  font-size: 0.82em;
+  color: #999;
+  margin-bottom: 8px;
+}
+.last-error {
+  font-size: 0.78em;
+  color: var(--red, #ef4444);
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: #fef2f2;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 500;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.ok   { background: var(--green, #10b981); }
+.toast.err  { background: var(--red, #ef4444); }
+</style>
+{% endblock %}
+
+{% block page_title %}数据源状态监控{% endblock %}
+
+{% block content %}
+
+{# ------- Summary Stats ------- #}
+<div class="summary-bar" id="summary-bar">
+  <div class="summary-item"><div class="num">{{ summary.get('total_sources', 0) }}</div><div class="lbl">数据源总数</div></div>
+  <div class="summary-item healthy"><div class="num" id="sum-healthy">{{ summary.get('healthy', 0) }}</div><div class="lbl">健康</div></div>
+  <div class="summary-item warning"><div class="num" id="sum-warning">{{ summary.get('warning', 0) }}</div><div class="lbl">警告</div></div>
+  <div class="summary-item error"><div class="num" id="sum-error">{{ summary.get('error', 0) }}</div><div class="lbl">异常</div></div>
+  <div class="summary-item"><div class="num" id="sum-events">{{ summary.get('total_events_inserted', 0) }}</div><div class="lbl">总入库事件</div></div>
+</div>
+
+{# ------- Action Bar ------- #}
+<div class="action-bar">
+  <button class="btn-sm btn-primary" onclick="loadAllSamples()">🔄 加载全部样例数据</button>
+  <button class="btn-sm btn-outline" onclick="refreshStatus()">↻ 刷新状态</button>
+  <span style="font-size:0.82em;color:#999;line-height:2.2;">自动刷新: 30s</span>
+</div>
+
+{# ------- Data Source Cards ------- #}
+<div class="datasource-grid" id="datasource-grid">
+  {% for src in sources %}
+  <div class="datasource-card status-{{ src.status }}" id="card-{{ src.source_name }}" data-source="{{ src.source_name }}">
+    <div class="source-header">
+      <span class="source-name">{{ src.display_name }}</span>
+      <span class="source-category cat-{{ src.data_category }}">{{ src.data_category }}</span>
+    </div>
+    {% if src.description %}
+    <div class="card-desc">{{ src.description }}</div>
+    {% endif %}
+    <div class="status-badge status-{{ src.status }}">
+      <span class="status-dot"></span>
+      {% if src.status == 'healthy' %} 正常
+      {% elif src.status == 'warning' %} 警告
+      {% elif src.status == 'error' %} 异常
+      {% else %} 未知
+      {% endif %}
+    </div>
+    <div class="stat-row"><span class="label">最后入库</span><span class="value">{{ src.last_ingestion_time or '—' }}</span></div>
+    <div class="stat-row"><span class="label">已入库事件</span><span class="value">{{ src.total_inserted }}</span></div>
+    <div class="stat-row"><span class="label">跳过 (重复)</span><span class="value">{{ src.total_skipped }}</span></div>
+    <div class="stat-row"><span class="label">错误</span><span class="value error-count">{{ src.total_errors }}</span></div>
+    {% if src.last_error %}
+    <div class="last-error">⚠ {{ src.last_error }}</div>
+    {% endif %}
+    <button class="btn-sm btn-outline btn-load" onclick="loadSourceSample('{{ src.source_name }}')">📥 加载样例</button>
+  </div>
+  {% endfor %}
+</div>
+
+{# ------- Toast ------- #}
+<div class="toast" id="toast"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(msg, ok) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + (ok ? 'ok' : 'err') + ' show';
+  setTimeout(function() { el.className = 'toast'; }, 3000);
+}
+
+async function refreshStatus() {
+  try {
+    var resp = await fetch('/datasource/api/status');
+    var data = await resp.json();
+    if (!data.ok) return;
+
+    // Update summary
+    var s = data.summary;
+    document.getElementById('sum-healthy').textContent = s.healthy;
+    document.getElementById('sum-warning').textContent = s.warning;
+    document.getElementById('sum-error').textContent = s.error;
+    document.getElementById('sum-events').textContent = s.total_events_inserted;
+
+    // Update each card
+    var sources = data.sources || [];
+    for (var i = 0; i < sources.length; i++) {
+      var src = sources[i];
+      var card = document.getElementById('card-' + src.source_name);
+      if (!card) continue;
+      // Update status
+      card.className = card.className.replace(/status-\w+/g, 'status-' + src.status);
+      var badge = card.querySelector('.status-badge');
+      if (badge) {
+        badge.className = badge.className.replace(/status-\w+/g, 'status-' + src.status);
+      }
+      // Update stats
+      var statRows = card.querySelectorAll('.stat-row .value');
+      if (statRows.length >= 4) {
+        statRows[0].textContent = src.last_ingestion_time || '—';
+        statRows[1].textContent = src.total_inserted;
+        statRows[2].textContent = src.total_skipped;
+        statRows[3].textContent = src.total_errors;
+      }
+      // Update error
+      var errDiv = card.querySelector('.last-error');
+      if (errDiv) {
+        if (src.last_error) {
+          errDiv.textContent = src.last_error;
+          errDiv.style.display = '';
+        } else {
+          errDiv.style.display = 'none';
+        }
+      }
+    }
+  } catch (e) {
+    console.error('refreshStatus error:', e);
+  }
+}
+
+async function loadSourceSample(sourceName) {
+  try {
+    var resp = await fetch('/datasource/api/samples/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: sourceName })
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      var r = data.results[sourceName] || {};
+      showToast(sourceName + ': 入库 ' + (r.inserted||0) + ' / 跳过 ' + (r.skipped||0) + ' / 错误 ' + (r.errors||0), true);
+      refreshStatus();
+    } else {
+      showToast('加载失败: ' + (data.error || 'unknown'), false);
+    }
+  } catch (e) {
+    showToast('请求失败: ' + e.message, false);
+  }
+}
+
+async function loadAllSamples() {
+  try {
+    var resp = await fetch('/datasource/api/samples/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'all' })
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      var total = 0, errors = 0;
+      for (var k in data.results) {
+        total += data.results[k].inserted || 0;
+        errors += data.results[k].errors || 0;
+      }
+      showToast('全部样例加载完成: 入库 ' + total + ' 条, 错误 ' + errors, errors === 0);
+      refreshStatus();
+    } else {
+      showToast('加载失败: ' + (data.error || 'unknown'), false);
+    }
+  } catch (e) {
+    showToast('请求失败: ' + e.message, false);
+  }
+}
+
+// Auto-refresh every 30s
+var _autoRefresh = setInterval(refreshStatus, 30000);
+</script>
+{% endblock %}
