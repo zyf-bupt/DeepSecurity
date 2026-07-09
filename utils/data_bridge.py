@@ -100,27 +100,29 @@ class DataBridge:
     def get_all_events(self) -> list[dict]:
         """合并所有数据源的事件"""
         events = []
-        for row in self._memory_store.get("HostBehaviors", []):
-            evt = row.get("result", row)
-            if isinstance(evt, str):
-                try: evt = json.loads(evt)
-                except: continue
-            evt.setdefault("data_source", "host_behavior")
-            events.append(evt)
-        for row in self._memory_store.get("NetworkTraffic", []):
-            evt = row.get("result", row)
-            if isinstance(evt, str):
-                try: evt = json.loads(evt)
-                except: continue
-            evt.setdefault("data_source", "network_traffic")
-            events.append(evt)
-        for row in self._memory_store.get("HostLogs", []):
-            evt = row.get("result", row)
-            if isinstance(evt, str):
-                try: evt = json.loads(evt)
-                except: continue
-            evt.setdefault("data_source", "host_log")
-            events.append(evt)
+        source_configs = [
+            ("HostBehaviors", "host_behavior"),
+            ("NetworkTraffic", "network_traffic"),
+            ("HostLogs", "host_log"),
+        ]
+        for table_name, data_source in source_configs:
+            for row in self._memory_store.get(table_name, []):
+                evt = row.get("result", row)
+                if isinstance(evt, str):
+                    try:
+                        evt = json.loads(evt)
+                    except Exception:
+                        continue
+                if not isinstance(evt, dict):
+                    continue
+                evt = dict(evt)
+                evt.setdefault("data_source", data_source)
+                evt.setdefault("source_table", table_name)
+                evt.setdefault("source_record_id", row.get("id"))
+                evt.setdefault("event_hash", row.get("event_hash"))
+                evt.setdefault("host_name", row.get("host_name"))
+                evt.setdefault("timestamp", row.get("event_time_utc") or row.get("create_time") or evt.get("timestamp"))
+                events.append(evt)
         return events
 
 

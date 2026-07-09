@@ -41,6 +41,7 @@ def _parse_where_equal(sql: str, params: list) -> tuple[dict, int]:
     where_sql = m.group(1).strip()
     if not where_sql:
         return {}, 0
+    start_index = sql[:m.start(1)].count("?")
     parts = re.split(r'\bAND\b', where_sql, flags=re.IGNORECASE)
     where: dict[str, object] = {}
     used = 0
@@ -50,8 +51,9 @@ def _parse_where_equal(sql: str, params: list) -> tuple[dict, int]:
         if not mm:
             continue
         col = mm.group(1)
-        if used < len(params):
-            where[col] = params[used]
+        idx = start_index + used
+        if idx < len(params):
+            where[col] = params[idx]
             used += 1
     return where, used
 
@@ -65,27 +67,30 @@ def _parse_order(sql: str) -> tuple[str, bool]:
     return col, direction != "ASC"
 
 
-def _parse_limit_offset(sql: str, params: list, start_index: int) -> tuple[int, int]:
+def _parse_limit_offset(sql: str, params: list) -> tuple[int, int]:
     top = re.search(r'\bTOP\s*\(?\s*\?\s*\)?', sql, re.IGNORECASE)
-    if top and start_index < len(params):
-        return int(params[start_index] or 0), 0
+    if top:
+        top_index = sql[:top.start()].count("?")
+        if top_index < len(params):
+            return int(params[top_index] or 0), 0
 
     offset_val = 0
     limit_val = 2000
     mo = re.search(r'\bOFFSET\s+(\?|\d+)\s+ROWS', sql, re.IGNORECASE)
     if mo:
         if mo.group(1) == "?":
-            if start_index < len(params):
-                offset_val = int(params[start_index] or 0)
-                start_index += 1
+            offset_index = sql[:mo.start(1)].count("?")
+            if offset_index < len(params):
+                offset_val = int(params[offset_index] or 0)
         else:
             offset_val = int(mo.group(1))
 
         mf = re.search(r'\bFETCH\s+NEXT\s+(\?|\d+)\s+ROWS\s+ONLY', sql, re.IGNORECASE)
         if mf:
             if mf.group(1) == "?":
-                if start_index < len(params):
-                    limit_val = int(params[start_index] or 0)
+                fetch_index = sql[:mf.start(1)].count("?")
+                if fetch_index < len(params):
+                    limit_val = int(params[fetch_index] or 0)
             else:
                 limit_val = int(mf.group(1))
     else:
@@ -163,9 +168,9 @@ def fetch_one(sql: str, params=None, conn_str: str | None = None) -> dict | None
         bridge = get_bridge()
         p = params or []
         table = _parse_table(sql)
-        where, used = _parse_where_equal(sql, p)
+        where, _used = _parse_where_equal(sql, p)
         order_by, desc = _parse_order(sql)
-        limit, offset = _parse_limit_offset(sql, p, used)
+        limit, offset = _parse_limit_offset(sql, p)
         rows = bridge.query(table, where=where or None, order_by=order_by, desc=desc, limit=max(1, min(limit, 1)), offset=offset)
         return rows[0] if rows else None
 
@@ -186,9 +191,9 @@ def fetch_all(sql: str, params=None, conn_str: str | None = None) -> list[dict]:
         bridge = get_bridge()
         p = params or []
         table = _parse_table(sql)
-        where, used = _parse_where_equal(sql, p)
+        where, _used = _parse_where_equal(sql, p)
         order_by, desc = _parse_order(sql)
-        limit, offset = _parse_limit_offset(sql, p, used)
+        limit, offset = _parse_limit_offset(sql, p)
         if limit <= 0:
             limit = 2000
         return bridge.query(table, where=where or None, order_by=order_by, desc=desc, limit=limit, offset=offset)

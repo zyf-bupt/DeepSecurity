@@ -16,6 +16,29 @@ def _sha256_hex_from_obj(obj: Any) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()
 
 
+def _normalize_event_payload(payload: Any) -> str:
+    if payload is None:
+        return ""
+    if isinstance(payload, (dict, list)):
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    if isinstance(payload, (bytes, bytearray)):
+        payload = payload.decode("utf-8", errors="ignore")
+    text = str(payload).strip()
+    if not text:
+        return ""
+    try:
+        return json.dumps(json.loads(text), sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        return text
+
+
+def _sha256_hex_from_payload(payload: Any) -> str:
+    normalized = _normalize_event_payload(payload)
+    if not normalized:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _safe_json_loads(v: Any) -> Any:
     if isinstance(v, (dict, list)):
         return v
@@ -32,6 +55,16 @@ def _safe_json_loads(v: Any) -> Any:
         return json.loads(v)
     except Exception:
         return None
+
+
+def _find_raw_event(evidence_item: dict, source_record_id: int) -> dict:
+    for raw_event in evidence_item.get("raw_events", []) or []:
+        try:
+            if int(raw_event.get("source_record_id") or 0) == int(source_record_id):
+                return raw_event
+        except Exception:
+            continue
+    return {}
 
 
 def _summarize_event(evt: dict) -> str:
@@ -123,10 +156,16 @@ def create_evidence_case(*, verdict: dict, chains: list[dict], evidence: list[di
                 source_record_id_int = int(source_record_id)
             except Exception:
                 continue
-            event_hash = str(src.get("event_hash") or "")
+            raw_event = _find_raw_event(ev, source_record_id_int)
+            event_hash = _resolve_record_event_hash(
+                source_table=source_table,
+                source_record_id=source_record_id_int,
+                fallback_hash=src.get("event_hash"),
+                fallback_payload=raw_event or src,
+            )
             collected_at = str(src.get("collected_at") or "")
             evidence_type = str(src.get("evidence_type") or base_type)[:50]
-            summary = _summarize_event(next((r for r in (ev.get("raw_events") or []) if r.get("source_record_id") == source_record_id), {})) or base_type
+            summary = _summarize_event(raw_event) or base_type
             execute(
                 """
                 INSERT INTO dbo.EvidenceRecords
@@ -242,17 +281,28 @@ def _fetch_source_row(source_table: str, source_record_id: int) -> dict | None:
     )
 
 
+def _resolve_record_event_hash(*, source_table: str, source_record_id: int, fallback_hash: Any = "", fallback_payload: Any = None) -> str:
+    src = _fetch_source_row(source_table, source_record_id)
+    if src:
+        expected = _sha256_hex_from_payload(src.get("result"))
+        if expected:
+            return expected
+        source_event_hash = str(src.get("event_hash") or "").strip()
+        if source_event_hash:
+            return source_event_hash
+    payload_hash = _sha256_hex_from_payload(fallback_payload)
+    if payload_hash:
+        return payload_hash
+    return str(fallback_hash or "").strip()
+
+
 def verify_evidence_case(case_id: str) -> dict:
     records = list_evidence_records(case_id)
     checks: list[dict] = []
     ok_count = 0
     for r in records:
         src = _fetch_source_row(r["source_table"], r["source_record_id"])
-        src_obj = _safe_json_loads(src.get("result")) if src else None
-        if isinstance(src_obj, dict):
-            expected = _sha256_hex_from_obj(src_obj)
-        else:
-            expected = ""
+        expected = _sha256_hex_from_payload(src.get("result")) if src else ""
         stored = r.get("event_hash") or ""
         matched = bool(expected) and stored.lower() == expected.lower()
         checks.append({
@@ -338,4 +388,3 @@ def export_evidence_case(case_id: str, *, fmt: str = "json") -> tuple[str, str]:
         return "text/markdown; charset=utf-8", "\n".join(lines)
 
     return "application/json; charset=utf-8", json.dumps(export_obj, ensure_ascii=False, indent=2)
-

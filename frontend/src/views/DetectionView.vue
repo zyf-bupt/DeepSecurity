@@ -198,7 +198,9 @@ async function runAnalysis() {
     } else {
       message.error('分析失败: ' + (res.data?.error || '未知错误'))
     }
-  } catch { message.error('请求失败') }
+  } catch {
+    message.error('请求失败')
+  }
   finally { analyzing.value = false }
 }
 

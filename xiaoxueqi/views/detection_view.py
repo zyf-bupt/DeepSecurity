@@ -219,10 +219,10 @@ def api_analyze():
         evidence=capture_result["evidence"],
         report=report,
     )
-
     return jsonify({
         "ok": True,
         "data": {
+            "detection": {
             "detection": {
                 "alerts_count": len(alerts),
                 "stats": llm_detector.get_stats()
