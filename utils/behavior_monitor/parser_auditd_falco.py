@@ -65,10 +65,6 @@ FALCO_RULE_MAP: list[tuple[str, str]] = [
 ]
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _clean_field(value: str | None) -> str | None:
     if value is None:
         return None
@@ -114,7 +110,7 @@ def parse_auditd_line(line: str, host_ip: str | None = None, host_name: str | No
         value = match.group(2).strip('\'"')
         pairs[key] = value
 
-    # Extract timestamp from msg=audit(...)
+    # Extract timestamp from msg=audit(...) — must be valid; never fall back to now()
     ts_match = re.search(r'msg=audit\(([\d.]+):', text)
     timestamp: str | None = None
     if ts_match:
@@ -122,9 +118,11 @@ def parse_auditd_line(line: str, host_ip: str | None = None, host_name: str | No
             ts_epoch = float(ts_match.group(1))
             timestamp = datetime.fromtimestamp(ts_epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         except (ValueError, OSError):
-            timestamp = _now_iso()
+            logger.debug("Auditd line rejected: unparseable timestamp in msg=audit(...)")
+            return None
     else:
-        timestamp = _now_iso()
+        logger.debug("Auditd line rejected: missing msg=audit(timestamp) pattern")
+        return None
 
     # Determine syscall number
     syscall_num: int | None = None
@@ -208,13 +206,13 @@ def parse_auditd_line(line: str, host_ip: str | None = None, host_name: str | No
     desc = f"Auditd: {record_type} — {event_type} ({pname_str}, PID {pid_str})"
 
     return {
-        "timestamp": timestamp or _now_iso(),
+        "timestamp": timestamp,
         "data_source": "auditd",
         "host_ip": host_ip or "",
         "host_name": host_name or "",
         "event_type": event_type,
         "action": action,
-        "entities": {k: v for k, v in entities.items() if v not in (None, "", 0) or k in ("pid", "parent_pid")},
+        "entities": {k: v for k, v in entities.items() if v not in (None, "") or k in ("pid", "parent_pid")},
         "features": features,
         "description": desc,
     }
@@ -274,23 +272,28 @@ def parse_falco_event(json_string: str, host_ip: str | None = None, host_name: s
     priority = str(data.get("priority") or "Notice")
     output_fields: dict[str, Any] = data.get("output_fields") or {}
 
-    # Parse timestamp
+    # Parse timestamp — must be valid; never fall back to now()
     timestamp: str | None = None
     raw_time = data.get("time")
     if raw_time:
         if isinstance(raw_time, str):
-            if raw_time.endswith("Z"):
-                timestamp = raw_time
-            else:
-                try:
+            try:
+                if raw_time.endswith("Z"):
+                    timestamp = raw_time
+                else:
                     dt = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
                     timestamp = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-                except ValueError:
-                    timestamp = _now_iso()
+            except (ValueError, OSError):
+                logger.debug("Falco event rejected: unparseable timestamp %r",
+                             str(raw_time)[:60])
+                return None
         else:
-            timestamp = _now_iso()
+            logger.debug("Falco event rejected: timestamp is not a string (type=%s)",
+                         type(raw_time).__name__)
+            return None
     else:
-        timestamp = _now_iso()
+        logger.debug("Falco event rejected: missing timestamp")
+        return None
 
     # Determine event_type from rule name
     event_type = "unknown_behavior"
@@ -367,13 +370,13 @@ def parse_falco_event(json_string: str, host_ip: str | None = None, host_name: s
     desc = f"Falco [{priority}]: {evt_desc}"
 
     return {
-        "timestamp": timestamp or _now_iso(),
+        "timestamp": timestamp,
         "data_source": "falco",
         "host_ip": host_ip or "",
         "host_name": host_name or "",
         "event_type": event_type,
         "action": "alert",
-        "entities": {k: v for k, v in entities.items() if v not in (None, "", 0) or k in ("pid", "parent_pid")},
+        "entities": {k: v for k, v in entities.items() if v not in (None, "") or k in ("pid", "parent_pid")},
         "features": features,
         "description": desc[:500],
     }

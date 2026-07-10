@@ -29,6 +29,7 @@ def ingest_zeek_entries(
     raw_content: str | None = None,
     host_name: str | None = None,
     log_type: str = "conn",
+    collected_override: int | None = None,
 ) -> dict[str, int]:
     """
     Ingest pre-parsed Zeek log entries (unified dicts) into NetworkTraffic.
@@ -38,10 +39,13 @@ def ingest_zeek_entries(
         raw_content: Raw log file content
         host_name: Sensor name
         log_type: Log type for status reporting
+        collected_override: If set, use this as collected count instead of len(entries).
+                            Use when the caller pre-filters lines and some are not parseable.
 
     Returns:
-        {inserted, skipped, errors}
+        {collected, inserted, skipped, errors}
     """
+    collected = collected_override if collected_override is not None else len(entries)
     inserted = 0
     skipped = 0
     errors = 0
@@ -65,13 +69,13 @@ def ingest_zeek_entries(
             logger.debug("Zeek ingest error", exc_info=True)
 
     tracker = get_status_tracker()
-    if errors > 0:
-        tracker.record_error("zeek", f"{errors} errors during Zeek ingestion")
     tracker.record_ingestion(
-        "zeek", inserted=inserted, skipped=skipped, errors=0, host_name=host_name,
+        "zeek",
+        inserted=inserted, skipped=skipped, errors=errors,
+        collected=collected, host_name=host_name,
     )
 
-    return {"inserted": inserted, "skipped": skipped, "errors": errors}
+    return {"collected": collected, "inserted": inserted, "skipped": skipped, "errors": errors}
 
 
 def ingest_zeek_log_lines(
@@ -91,8 +95,9 @@ def ingest_zeek_log_lines(
         log_type: One of "conn", "dns", "http", "files", "ssl"
 
     Returns:
-        {inserted, skipped, errors}
+        {collected, inserted, skipped, errors}
     """
+    attempt_count = 0
     parsed: list[dict] = []
     for line in lines:
         if not line or not isinstance(line, str):
@@ -100,6 +105,7 @@ def ingest_zeek_log_lines(
         line = line.strip()
         if not line or line.startswith("#"):
             continue
+        attempt_count += 1
         ev = parse_zeek_log(line, log_type=log_type, host_name=host_name)
         if ev:
             parsed.append(ev)
@@ -109,6 +115,7 @@ def ingest_zeek_log_lines(
         raw_content=raw_content or "\n".join(lines),
         host_name=host_name,
         log_type=log_type,
+        collected_override=attempt_count,
     )
 
 
@@ -150,13 +157,18 @@ def ingest_suricata_entries(
     entries: list[dict],
     raw_content: str | None = None,
     host_name: str | None = None,
+    collected_override: int | None = None,
 ) -> dict[str, int]:
     """
     Ingest pre-parsed Suricata eve.json entries (unified dicts) into NetworkTraffic.
 
+    Args:
+        collected_override: If set, use this as collected count instead of len(entries).
+
     Returns:
-        {inserted, skipped, errors}
+        {collected, inserted, skipped, errors}
     """
+    collected = collected_override if collected_override is not None else len(entries)
     inserted = 0
     skipped = 0
     errors = 0
@@ -180,13 +192,13 @@ def ingest_suricata_entries(
             logger.debug("Suricata ingest error", exc_info=True)
 
     tracker = get_status_tracker()
-    if errors > 0:
-        tracker.record_error("suricata", f"{errors} errors during Suricata ingestion")
     tracker.record_ingestion(
-        "suricata", inserted=inserted, skipped=skipped, errors=0, host_name=host_name,
+        "suricata",
+        inserted=inserted, skipped=skipped, errors=errors,
+        collected=collected, host_name=host_name,
     )
 
-    return {"inserted": inserted, "skipped": skipped, "errors": errors}
+    return {"collected": collected, "inserted": inserted, "skipped": skipped, "errors": errors}
 
 
 def ingest_suricata_lines(
@@ -199,8 +211,9 @@ def ingest_suricata_lines(
     Parse raw Suricata eve.json lines and ingest into NetworkTraffic.
 
     Returns:
-        {inserted, skipped, errors}
+        {collected, inserted, skipped, errors}
     """
+    attempt_count = 0
     parsed: list[dict] = []
     for line in lines:
         if not line or not isinstance(line, str):
@@ -208,6 +221,7 @@ def ingest_suricata_lines(
         line = line.strip()
         if not line:
             continue
+        attempt_count += 1
         ev = parse_suricata_eve(line, host_name=host_name)
         if ev:
             parsed.append(ev)
@@ -216,6 +230,7 @@ def ingest_suricata_lines(
         entries=parsed,
         raw_content=raw_content or "\n".join(lines),
         host_name=host_name,
+        collected_override=attempt_count,
     )
 
 

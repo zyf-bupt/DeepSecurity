@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re as _re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -59,10 +60,6 @@ SURICATA_EVENT_MAP: dict[str, str] = {
 }
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _parse_zeek_timestamp(ts_str: str) -> str | None:
     """Convert Zeek epoch timestamp (float) to ISO8601 Z string."""
     if not ts_str or ts_str in ("-", "(empty)"):
@@ -72,6 +69,33 @@ def _parse_zeek_timestamp(ts_str: str) -> str | None:
         return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     except (ValueError, OSError):
         return None
+
+
+# Simple IPv4 / IPv6 validation regex – rejects hostnames like "win-dc01.security.local"
+# IPv4: validates each octet is 0-255
+_IPV4_RE = _re.compile(
+    r'^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$'
+)
+_IPV6_RE = _re.compile(
+    r'^(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$'
+)
+
+
+def _looks_like_ip(value: str) -> bool:
+    """Return True if *value* looks like an IP address (not a hostname)."""
+    if not value:
+        return False
+    return bool(_IPV4_RE.match(value)) or bool(_IPV6_RE.match(value))
+
+
+# Minimum number of actual tab-delimited fields required for a valid Zeek log line.
+# Set to 2 (ts + at least one data field) to support sparse log types like files.log.
+_MIN_ZEEK_FIELDS = 2
+
+# Log types that must have at least one valid IP address in id.orig_h / id.resp_h.
+_CONNECTION_ORIENTED_TYPES: set[str] = {
+    "conn", "dns", "http", "ssl", "ssh", "ftp", "smtp", "dhcp",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -99,7 +123,10 @@ def _parse_zeek_header(text: str) -> dict[str, Any]:
         if line.startswith("#separator"):
             sep = line.split(maxsplit=1)
             if len(sep) > 1:
-                info["separator"] = sep[1].encode().decode("unicode_escape")
+                try:
+                    info["separator"] = sep[1].encode().decode("unicode_escape")
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    info["separator"] = sep[1].strip()
         elif line.startswith("#set_separator"):
             parts = line.split(maxsplit=1)
             if len(parts) > 1:
@@ -163,6 +190,13 @@ def parse_zeek_log(
         return None
 
     values = line.split("\t")
+
+    # ── Validation: reject lines with too few actual fields ──────────
+    actual_value_count = sum(1 for v in values if v.strip() not in ("", "-", "(empty)"))
+    if actual_value_count < _MIN_ZEEK_FIELDS:
+        logger.debug("Zeek line rejected: only %d meaningful fields (need >=%d)", actual_value_count, _MIN_ZEEK_FIELDS)
+        return None
+
     if len(values) < len(fields):
         # Pad with unset
         values = values + ["-"] * (len(fields) - len(values))
@@ -179,9 +213,12 @@ def parse_zeek_log(
         else:
             data[field_name] = ""
 
-    # Parse timestamp
+    # Parse timestamp — must be a valid epoch float; NEVER fall back to now()
     ts_raw = data.get("ts", "")
-    timestamp = _parse_zeek_timestamp(ts_raw) or _now_iso()
+    timestamp = _parse_zeek_timestamp(ts_raw)
+    if timestamp is None:
+        logger.debug("Zeek line rejected: unparseable timestamp %r", ts_raw[:60] if ts_raw else "")
+        return None
 
     # Extract common network fields
     src_ip = data.get("id.orig_h", "")
@@ -189,6 +226,15 @@ def parse_zeek_log(
     src_port = data.get("id.orig_p", "")
     dst_port = data.get("id.resp_p", "")
     proto = data.get("proto", "").lower()
+
+    # ── Validation: connection-oriented types require at least one valid IP ──
+    if lt in _CONNECTION_ORIENTED_TYPES:
+        src_is_ip = _looks_like_ip(src_ip)
+        dst_is_ip = _looks_like_ip(dst_ip)
+        if not src_is_ip and not dst_is_ip:
+            logger.debug("Zeek line rejected: no valid IP in orig_h=%r resp_h=%r",
+                         src_ip[:60] if src_ip else "", dst_ip[:60] if dst_ip else "")
+            return None
 
     # Determine event_type
     event_type = ZEEK_LOG_TYPE_MAP.get(lt, "network_event")
@@ -286,7 +332,7 @@ def parse_zeek_log(
         "dst_port": dst_port or None,
         "protocol": proto or "tcp",
         "event_type": event_type,
-        "entities": {k: v for k, v in entities.items() if v not in (None, "", 0)},
+        "entities": {k: v for k, v in entities.items() if v not in (None, "")},
         "features": features,
         "description": " — ".join(desc_parts),
     }
@@ -421,7 +467,15 @@ def parse_suricata_eve(
     dst_port = data.get("dest_port")
     proto = str(data.get("proto") or "").lower()
 
-    # Parse timestamp
+    # ── Validation: at least one IP must look like a real IP address ──
+    src_is_ip = _looks_like_ip(src_ip)
+    dst_is_ip = _looks_like_ip(dst_ip)
+    if not src_is_ip and not dst_is_ip:
+        logger.debug("Suricata line rejected: no valid IP in src_ip=%r dest_ip=%r",
+                     src_ip[:60] if src_ip else "", dst_ip[:60] if dst_ip else "")
+        return None
+
+    # Parse timestamp — must be a valid ISO8601 string; NEVER fall back to now()
     ts_raw = data.get("timestamp")
     timestamp: str | None = None
     if ts_raw:
@@ -431,15 +485,19 @@ def parse_suricata_eve(
             if "+" in ts_str or ts_str.endswith("Z"):
                 # Parse with timezone
                 dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                timestamp = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             else:
-                # Assume UTC
-                ts_clean = ts_str.split(".")[0]
-                timestamp = ts_clean + "Z"
+                # No timezone marker — attempt to parse as naive datetime, treat as UTC
+                dt = datetime.fromisoformat(ts_str)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            timestamp = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         except (ValueError, OSError):
-            timestamp = _now_iso()
+            logger.debug("Suricata line rejected: unparseable timestamp %r",
+                         str(ts_raw)[:60])
+            return None
     else:
-        timestamp = _now_iso()
+        logger.debug("Suricata line rejected: missing timestamp")
+        return None
 
     # Determine event_type
     event_type = SURICATA_EVENT_MAP.get(sev_type, f"suricata_{sev_type}" if sev_type else "network_event")
@@ -549,7 +607,7 @@ def parse_suricata_eve(
         "dst_port": str(dst_port) if dst_port is not None else None,
         "protocol": proto or "tcp",
         "event_type": event_type,
-        "entities": {k: v for k, v in entities.items() if v not in (None, "", 0)},
+        "entities": {k: v for k, v in entities.items() if v not in (None, "")},
         "features": features,
         "description": " — ".join(desc_parts),
     }

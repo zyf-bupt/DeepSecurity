@@ -118,10 +118,10 @@ def ingest_auditd_events(
         errors += err
 
     tracker = get_status_tracker()
-    if errors > 0:
-        tracker.record_error("auditd", f"{errors} errors during Auditd ingestion")
     tracker.record_ingestion(
-        "auditd", inserted=inserted, skipped=skipped, errors=0, host_name=host_name,
+        "auditd",
+        inserted=inserted, skipped=skipped, errors=errors,
+        collected=total_collected, host_name=host_name,
     )
 
     return {"collected": total_collected, "inserted": inserted, "skipped": skipped, "errors": errors}
@@ -175,10 +175,10 @@ def ingest_falco_events(
         errors += err
 
     tracker = get_status_tracker()
-    if errors > 0:
-        tracker.record_error("falco", f"{errors} errors during Falco ingestion")
     tracker.record_ingestion(
-        "falco", inserted=inserted, skipped=skipped, errors=0, host_name=host_name,
+        "falco",
+        inserted=inserted, skipped=skipped, errors=errors,
+        collected=total_collected, host_name=host_name,
     )
 
     return {"collected": total_collected, "inserted": inserted, "skipped": skipped, "errors": errors}

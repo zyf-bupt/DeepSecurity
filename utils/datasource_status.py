@@ -76,18 +76,20 @@ class DataSourceStatusTracker:
         inserted: int = 0,
         skipped: int = 0,
         errors: int = 0,
+        collected: int = 0,
         host_name: str | None = None,
     ) -> None:
-        """Record an ingestion batch result.
+        """Record an ingestion batch result — the SINGLE entry point for status updates.
 
-        IMPORTANT: Callers that already called record_error() for the same batch
-        MUST pass errors=0 to avoid double-counting. Use one of these patterns:
+        Do NOT call record_error() separately for the same batch; pass the actual
+        error count here instead.
 
-          Pattern A (preferred): record_error() then record_ingestion(errors=0)
-          Pattern B (simple):     record_ingestion(errors=N) without record_error
-
-        Error state (last_error, last_error_time) and consecutive_errors are
-        only cleared when inserted > 0 AND errors == 0 (fully successful batch).
+        Behavior:
+        - last_ingestion_time is only refreshed when inserted > 0 (real data landed).
+        - inserted > 0, errors == 0  → full success, clears error state.
+        - inserted > 0, errors > 0   → partial success, records errors, keeps last_error.
+        - inserted == 0, collected > 0 → nothing parseable, records error.
+        - inserted == 0, errors > 0  → total failure.
         """
         now = _utc_now_iso()
         with self._lock:
@@ -95,31 +97,49 @@ class DataSourceStatusTracker:
             src.setdefault("source_name", source_name)
             src.setdefault("display_name", source_name)
             src.setdefault("data_category", "unknown")
-            src["last_ingestion_time"] = now
+            src["host_name"] = host_name or src.get("host_name")
+
+            # Only advance last_ingestion_time when actual data was ingested
+            if inserted > 0:
+                src["last_ingestion_time"] = now
+
             src["total_inserted"] = src.get("total_inserted", 0) + inserted
             src["total_skipped"] = src.get("total_skipped", 0) + skipped
-            src["host_name"] = host_name or src.get("host_name")
+
+            # Always accumulate error totals for tracking
             src["total_errors"] = src.get("total_errors", 0) + errors
 
             if inserted > 0 and errors == 0:
-                # Fully successful batch — reset error state
+                # ── Full success ──
                 src["consecutive_errors"] = 0
                 src["last_error"] = None
                 src["last_error_time"] = None
-            elif errors > 0:
+            elif inserted > 0 and errors > 0:
+                # ── Partial success (data flows, but some records fail) ──
+                # Do NOT increment consecutive_errors — data is still being ingested.
+                # Only update last_error so operators can see what failed.
+                src["last_error"] = f"部分成功: {inserted} 条入库, {errors} 条失败"
+                src["last_error_time"] = now
+            elif inserted == 0 and (errors > 0 or collected > 0):
+                # ── Nothing ingested ──
+                # total_errors already incremented above; add 1 more if errors==0
+                # to ensure every failed batch is tracked
+                if errors == 0:
+                    src["total_errors"] = src.get("total_errors", 0) + 1
                 src["consecutive_errors"] = src.get("consecutive_errors", 0) + 1
-            # else: inserted == 0 and errors == 0 — no change to error state
+                src["last_error"] = (
+                    f"{errors} errors during ingestion" if errors > 0
+                    else "所有输入事件均无法解析，未入库任何数据"
+                )
+                src["last_error_time"] = now
+            # else: inserted == 0, errors == 0, collected == 0 — no-op (empty input)
 
             src["status"] = self._compute_health(src)
 
     def record_error(self, source_name: str, error_msg: str) -> None:
-        """Record an ingestion error.
+        """Standalone error recording — use when you only have error info, not counts.
 
-        Call this BEFORE record_ingestion() for the same batch with errors=0,
-        so that total_errors is not double-counted.
-
-        Alternatively, just call record_ingestion(errors=N) without record_error.
-        """
+        Prefer calling record_ingestion(errors=N, collected=N) for batch results."""
         now = _utc_now_iso()
         with self._lock:
             src = self._sources.setdefault(source_name, {})
@@ -151,12 +171,13 @@ class DataSourceStatusTracker:
 
         # Check freshness
         try:
-            if last_time.endswith("Z"):
-                ts = datetime.strptime(last_time, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            else:
-                ts = datetime.fromisoformat(last_time.replace("+00:00", ""))
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+            # Use fromisoformat for both cases — handles fractional seconds
+            ts_str = last_time
+            if ts_str.endswith("Z"):
+                ts_str = ts_str[:-1] + "+00:00"
+            ts = datetime.fromisoformat(ts_str)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
         except Exception:
             return "unknown"
 

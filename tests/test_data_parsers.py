@@ -261,6 +261,38 @@ class TestSysmonParser(unittest.TestCase):
         self.assertIsNone(parse_sysmon_event(""))
         self.assertIsNone(parse_sysmon_event(None))
 
+    def test_missing_timecreated_rejected(self):
+        """Sysmon event without TimeCreated must be rejected, not use now()."""
+        xml_no_ts = """<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'>
+          <System>
+            <Provider Name='Microsoft-Windows-Sysmon' Guid='{5770385F-C22A-43E0-BF4C-06F5698FFBD9}'/>
+            <EventID>1</EventID>
+            <Computer>test-pc</Computer>
+          </System>
+          <EventData>
+            <Data Name='Image'>C:\\Windows\\System32\\cmd.exe</Data>
+            <Data Name='ProcessId'>1234</Data>
+          </EventData>
+        </Event>"""
+        self.assertIsNone(parse_sysmon_event(xml_no_ts),
+            "Sysmon event without TimeCreated must be rejected")
+
+    def test_unknown_eventid_rejected(self):
+        """Sysmon event with unsupported Event ID must be rejected."""
+        xml_unknown = """<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'>
+          <System>
+            <Provider Name='Microsoft-Windows-Sysmon' Guid='{5770385F-C22A-43E0-BF4C-06F5698FFBD9}'/>
+            <EventID>999</EventID>
+            <TimeCreated SystemTime='2026-07-09T06:30:00.123456789Z'/>
+            <Computer>test-pc</Computer>
+          </System>
+          <EventData>
+            <Data Name='Image'>C:\\Windows\\System32\\cmd.exe</Data>
+          </EventData>
+        </Event>"""
+        self.assertIsNone(parse_sysmon_event(xml_unknown),
+            "Sysmon event with unknown Event ID 999 must be rejected")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Auditd Parser Tests
@@ -312,6 +344,19 @@ class TestAuditdParser(unittest.TestCase):
         self.assertIsNone(parse_auditd_line(None))
         self.assertIsNone(parse_auditd_line("not an audit line"))
 
+    def test_missing_timestamp_rejected(self):
+        """Auditd line without msg=audit(timestamp) must be rejected, not use now()."""
+        # Valid syscall but no msg=audit(...) pattern
+        bad = 'type=SYSCALL arch=c000003e syscall=59 success=yes comm="curl" exe="/usr/bin/curl"'
+        self.assertIsNone(parse_auditd_line(bad),
+            "Auditd line without msg=audit timestamp must be rejected")
+
+    def test_bad_timestamp_rejected(self):
+        """Auditd line with unparseable timestamp epoch must be rejected."""
+        bad = 'type=SYSCALL msg=audit(not_a_number:456): arch=c000003e syscall=59 success=yes comm="curl" exe="/usr/bin/curl"'
+        self.assertIsNone(parse_auditd_line(bad),
+            "Auditd line with unparseable timestamp must be rejected")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Falco Parser Tests
@@ -355,6 +400,24 @@ class TestFalcoParser(unittest.TestCase):
         self.assertIsNone(parse_falco_event("not json"))
         self.assertIsNone(parse_falco_event(""))
         self.assertIsNone(parse_falco_event(None))
+
+    def test_missing_timestamp_rejected(self):
+        """Falco event without 'time' field must be rejected."""
+        bad = '{"output":"test","priority":"Warning","rule":"Test rule","output_fields":{"proc.name":"test"}}'
+        self.assertIsNone(parse_falco_event(bad),
+            "Falco event without timestamp must be rejected")
+
+    def test_bad_timestamp_rejected(self):
+        """Falco event with unparseable timestamp must be rejected."""
+        bad = '{"output":"test","priority":"Warning","rule":"Test rule","time":"not-a-date","output_fields":{"proc.name":"test"}}'
+        self.assertIsNone(parse_falco_event(bad),
+            "Falco event with unparseable timestamp must be rejected")
+
+    def test_non_string_timestamp_rejected(self):
+        """Falco event with non-string timestamp must be rejected."""
+        bad = '{"output":"test","priority":"Warning","rule":"Test rule","time":12345,"output_fields":{"proc.name":"test"}}'
+        self.assertIsNone(parse_falco_event(bad),
+            "Falco event with numeric timestamp must be rejected")
 
     def test_batch_parsing(self):
         results = parse_falco_lines([FALCO_SHELL, FALCO_FILE, FALCO_NET, FALCO_CRON, FALCO_BIN])
@@ -683,20 +746,70 @@ class TestStatusErrorTracking(unittest.TestCase):
         """record_ingestion with errors>0 when no prior record_error was called."""
         self.tracker.reset_source("test-direct")
         self.tracker.register_source("test-direct")
-        self.tracker.record_ingestion("test-direct", inserted=0, skipped=0, errors=3)
+        self.tracker.record_ingestion("test-direct", inserted=0, skipped=0, errors=3, collected=5)
         src = self.tracker.get_status("test-direct")
         self.assertEqual(src["total_errors"], 3)
         self.assertEqual(src["consecutive_errors"], 1)
 
     def test_no_double_count_when_both_called(self):
-        """record_error + record_ingestion(errors=0) should only count error once."""
+        """record_error is standalone — record_ingestion(0,0) does NOT re-count."""
         self.tracker.reset_source("test-double")
         self.tracker.register_source("test-double")
         self.tracker.record_error("test-double", "disk full")
+        # collected=0, inserted=0, errors=0 → no-op (doesn't double-count)
         self.tracker.record_ingestion("test-double", inserted=0, skipped=0, errors=0)
         src = self.tracker.get_status("test-double")
         self.assertEqual(src["total_errors"], 1, "errors should only be counted once")
         self.assertEqual(src["consecutive_errors"], 1)
+
+    def test_nothing_parsed_triggers_error(self):
+        """collected > 0 but inserted == 0 → error state, not healthy."""
+        self.tracker.reset_source("test-empty")
+        self.tracker.register_source("test-empty")
+        self.tracker.record_ingestion("test-empty", inserted=0, skipped=0, errors=0, collected=10)
+        src = self.tracker.get_status("test-empty")
+        self.assertEqual(src["consecutive_errors"], 1)
+        self.assertIsNotNone(src["last_error"])
+        self.assertIn("无法解析", src.get("last_error", ""))
+        # last_ingestion_time should NOT be set (nothing was ingested)
+        self.assertIsNone(src["last_ingestion_time"])
+
+    def test_last_ingestion_time_only_on_success(self):
+        """last_ingestion_time is only updated when inserted > 0."""
+        self.tracker.reset_source("test-lit")
+        self.tracker.register_source("test-lit")
+        # Failed batch
+        self.tracker.record_ingestion("test-lit", inserted=0, skipped=0, errors=1, collected=5)
+        self.assertIsNone(self.tracker.get_status("test-lit")["last_ingestion_time"])
+        # Successful batch
+        self.tracker.record_ingestion("test-lit", inserted=3, skipped=0, errors=0)
+        self.assertIsNotNone(self.tracker.get_status("test-lit")["last_ingestion_time"])
+
+    def test_partial_success_keeps_error_info(self):
+        """inserted > 0 but errors > 0 → partial success, does NOT clear error."""
+        self.tracker.reset_source("test-partial")
+        self.tracker.register_source("test-partial")
+        self.tracker.record_ingestion("test-partial", inserted=5, skipped=0, errors=2, collected=7)
+        src = self.tracker.get_status("test-partial")
+        self.assertEqual(src["total_errors"], 2)
+        # Partial success does NOT increment consecutive_errors (data is still flowing)
+        self.assertEqual(src["consecutive_errors"], 0)
+        self.assertIsNotNone(src["last_error"])
+        self.assertIn("部分成功", src.get("last_error", "") or "")
+        # last_ingestion_time IS set (some data was ingested)
+        self.assertIsNotNone(src["last_ingestion_time"])
+
+    def test_partial_success_then_full_success_clears(self):
+        """Partial → full success clears error state."""
+        self.tracker.reset_source("test-pf")
+        self.tracker.register_source("test-pf")
+        self.tracker.record_ingestion("test-pf", inserted=5, skipped=0, errors=2, collected=7)
+        # Partial success has consecutive_errors=0 (data is flowing)
+        self.assertEqual(self.tracker.get_status("test-pf")["consecutive_errors"], 0)
+        self.tracker.record_ingestion("test-pf", inserted=3, skipped=0, errors=0)
+        src = self.tracker.get_status("test-pf")
+        self.assertEqual(src["consecutive_errors"], 0)
+        self.assertIsNone(src["last_error"])
 
     def test_failure_then_query_status_shows_error(self):
         """After failure, status API must show the error."""
@@ -763,6 +876,39 @@ class TestInvalidInput(unittest.TestCase):
     def test_zeek_all_invalid_lines(self):
         for bad in ["", None, "#just a comment", "#separator \x09"]:
             self.assertIsNone(parse_zeek_log(bad))
+
+    def test_zeek_arbitrary_text_rejected(self):
+        """Arbitrary non-Zeek text must be rejected (not parsed as valid events)."""
+        # Single-word garbage
+        self.assertIsNone(parse_zeek_log("bad line"))
+        # Random text with spaces (not tab-delimited)
+        self.assertIsNone(parse_zeek_log("this is just random text"))
+        # JSON — not a valid Zeek log
+        self.assertIsNone(parse_zeek_log('{"timestamp":"2026-01-01","src_ip":"1.2.3.4"}'))
+        # Tab-delimited but not enough meaningful fields
+        self.assertIsNone(parse_zeek_log("a\tb\tc"))
+
+    def test_suricata_invalid_ip_rejected(self):
+        """Suricata events with non-IP addresses must be rejected."""
+        bad = '{"timestamp":"2026-07-09T06:30:00+0800","event_type":"alert","src_ip":"hostname","dest_ip":"another-host","proto":"TCP"}'
+        self.assertIsNone(parse_suricata_eve(bad))
+
+    def test_suricata_missing_timestamp_rejected(self):
+        """Suricata events without valid timestamp must be rejected."""
+        # Missing timestamp field
+        bad_no_ts = '{"event_type":"alert","src_ip":"192.168.1.1","dest_ip":"10.0.0.1","proto":"TCP"}'
+        self.assertIsNone(parse_suricata_eve(bad_no_ts),
+            "Suricata event without timestamp must be rejected")
+        # Unparseable timestamp
+        bad_bad_ts = '{"timestamp":"not-a-real-date","event_type":"alert","src_ip":"192.168.1.1","dest_ip":"10.0.0.1","proto":"TCP"}'
+        self.assertIsNone(parse_suricata_eve(bad_bad_ts),
+            "Suricata event with unparseable timestamp must be rejected")
+
+    def test_suricata_bad_timestamp_ip_ok_still_rejected(self):
+        """Even with valid IPs, a Suricata event with bad timestamp is rejected."""
+        bad = '{"timestamp":"garbage","event_type":"dns","src_ip":"192.168.1.100","dest_ip":"10.0.0.53","proto":"UDP","dns":{"rrname":"example.com","rrtype":"A"}}'
+        self.assertIsNone(parse_suricata_eve(bad),
+            "Suricata event with valid IPs but bad timestamp must be rejected")
 
 
 if __name__ == "__main__":

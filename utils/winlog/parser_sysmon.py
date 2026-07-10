@@ -58,10 +58,6 @@ def _sha256_hex(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _strip_ns(tag: str) -> str:
     """Strip XML namespace from tag."""
     return tag.split("}", 1)[-1] if "}" in tag else tag
@@ -133,9 +129,8 @@ def _parse_sysmon_xml(xml_string: str) -> dict[str, Any]:
     # Look up mapping
     mapped = EVENT_ID_MAP.get(event_id)
     if mapped is None:
-        logger.debug("Unsupported Sysmon Event ID: %d", event_id)
-        # Still try to produce a generic event
-        mapped = ("unknown_sysmon_event", "unknown")
+        logger.debug("Sysmon event rejected: unsupported Event ID %d", event_id)
+        return {}
 
     event_type, action = mapped
 
@@ -149,10 +144,11 @@ def _parse_sysmon_xml(xml_string: str) -> dict[str, Any]:
             if name:
                 data_fields[name] = value
 
-    # Normalize timestamp
+    # Normalize timestamp — must be present; never fall back to now()
     timestamp = time_created
     if not timestamp:
-        timestamp = _now_iso()
+        logger.debug("Sysmon event rejected: missing TimeCreated in System node")
+        return {}
     # Ensure Z suffix
     if timestamp and not timestamp.endswith("Z") and "T" in timestamp:
         timestamp = timestamp.replace(" ", "T")
@@ -270,7 +266,7 @@ def _parse_sysmon_xml(xml_string: str) -> dict[str, Any]:
         "event_type": event_type,
         "action": action,
         "raw_event_id": event_id,
-        "entities": {k: v for k, v in entities.items() if v not in (None, "", 0) or k in ("pid", "parent_pid")},
+        "entities": {k: v for k, v in entities.items() if v not in (None, "") or k in ("pid", "parent_pid")},
         "features": features,
         "description": desc,
         "_raw_data_fields": data_fields if logger.isEnabledFor(logging.DEBUG) else {},
