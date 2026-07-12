@@ -1,0 +1,26 @@
+[
+  {
+    "_description": "Auditd EXECVE: curl downloading payload from external server",
+    "line": "type=SYSCALL msg=audit(1752085800.123:456): arch=c000003e syscall=59 success=yes exit=0 a0=7f1234567000 a1=7f1234568000 a2=7f1234569000 a3=0 items=2 ppid=2345 pid=6789 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts1 ses=10 comm=\"curl\" exe=\"/usr/bin/curl\" subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 key=\"command-exec\""
+  },
+  {
+    "_description": "Auditd OPENAT: reading /etc/shadow file",
+    "line": "type=SYSCALL msg=audit(1752085900.456:789): arch=c000003e syscall=257 success=no exit=-13 a0=ffffff9c a1=7ffd12345670 a2=80000 a3=0 items=1 ppid=3456 pid=7890 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts2 ses=11 comm=\"cat\" exe=\"/usr/bin/cat\" subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 key=\"file-access\""
+  },
+  {
+    "_description": "Auditd CONNECT: outbound connection to external IP on port 4444",
+    "line": "type=SYSCALL msg=audit(1752086000.789:1012): arch=c000003e syscall=42 success=yes exit=0 a0=3 a1=7f123456a000 a2=10 a3=0 items=0 ppid=4567 pid=8901 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts3 ses=12 comm=\"nc\" exe=\"/usr/bin/nc.openbsd\" subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 key=\"network-connect\""
+  },
+  {
+    "_description": "Auditd UNLINK: deleting a critical file",
+    "line": "type=SYSCALL msg=audit(1752086100.012:1345): arch=c000003e syscall=87 success=yes exit=0 a0=7f123456b000 a1=0 a2=0 a3=0 items=1 ppid=5678 pid=9012 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts4 ses=13 comm=\"rm\" exe=\"/usr/bin/rm\" subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 key=\"file-delete\""
+  },
+  {
+    "_description": "Auditd PAM: user authentication (login)",
+    "line": "type=USER_AUTH msg=audit(1752086200.345:1678): pid=12345 uid=0 auid=4294967295 ses=4294967295 subj=system_u:system_r:sshd_t:s0-s0:c0.c1023 msg='op=PAM:authentication grantors=pam_unix,pam_permit acct=\"root\" exe=\"/usr/sbin/sshd\" hostname=10.0.0.50 addr=10.0.0.50 terminal=ssh res=success'"
+  },
+  {
+    "_description": "Auditd EXECVE: reverse shell via netcat",
+    "line": "type=SYSCALL msg=audit(1752086300.678:2001): arch=c000003e syscall=59 success=yes exit=0 a0=7f123456c000 a1=7f123456d000 a2=7f123456e000 a3=0 items=2 ppid=7890 pid=10123 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts5 ses=14 comm=\"nc.openbsd\" exe=\"/usr/bin/nc.openbsd\" subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 key=\"reverse-shell\""
+  }
+]

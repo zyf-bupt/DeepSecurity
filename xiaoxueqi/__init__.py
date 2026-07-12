@@ -23,6 +23,7 @@ def create_app():
     from .views.detection_view import bp as detection_bp
     from .views.scenario_view import bp as scenario_bp
     from .views.attribution_view import bp as attribution_bp
+    from .views.datasource_view import bp as datasource_bp
 
     app.register_blueprint(main_bp)  # /
     app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
@@ -35,6 +36,7 @@ def create_app():
     app.register_blueprint(detection_bp, url_prefix='/detection')
     app.register_blueprint(scenario_bp, url_prefix='/scenario')
     app.register_blueprint(attribution_bp, url_prefix='/attribution')
+    app.register_blueprint(datasource_bp, url_prefix='/datasource')
 
     # ---- SPA 静态文件服务（生产模式） ----
     # 开发模式: Vite dev server :5173 → proxy API 请求到 Flask :5000
