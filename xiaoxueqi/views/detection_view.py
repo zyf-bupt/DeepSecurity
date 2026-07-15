@@ -92,12 +92,20 @@ def api_analyze():
         evidence=capture_result["evidence"]
     )
 
+    ttps = attribution_result.get("ttps_extracted", []) or []
+    knowledge_refs = rag_kb.collect_supporting_references(
+        technique_ids=[t.get("technique_id", "") for t in ttps],
+        technique_names=[t.get("technique_name", "") for t in ttps],
+        apt_name=attribution_result.get("attribution", {}).get("result", {}).get("best_match", ""),
+        top_k=4,
+    )
+
     # 4. 攻击者画像
     profile = attacker_profiler.build_profile(
         attribution_data=attribution_result,
         behavioral=attribution_result.get("attribution", {}).get("result", {}).get("behavioral_profile", {}),
         iocs=capture_result["verdict"].get("iocs", {}),
-        ttps=attribution_result.get("ttps_extracted", [])
+        ttps=ttps
     )
 
     # 5. 生成报告
@@ -106,7 +114,8 @@ def api_analyze():
         attribution=attribution_result,
         profile=profile,
         chains=capture_result["chains"],
-        detection_stats=mgr.get_detection_stats()
+        detection_stats=mgr.get_detection_stats(),
+        knowledge_refs=knowledge_refs,
     )
 
     # 6. 导出可视化数据
@@ -131,7 +140,8 @@ def api_analyze():
             "attribution": attribution_result,
             "profile": profile,
             "report": report,
-            "visualization": vis_data
+            "visualization": vis_data,
+            "knowledge_refs": knowledge_refs,
         }
     })
 
@@ -150,17 +160,18 @@ def api_rag_search():
         return jsonify({"ok": False, "error": "请提供搜索词"}), 400
 
     results = rag_kb.search(query, top_k=5)
-    return jsonify({"ok": True, "data": results})
+    return jsonify({
+        "ok": True,
+        "data": results,
+        "meta": {
+            "backend": rag_kb.get_stats().get("backend", "tfidf"),
+            "query": query,
+            "count": len(results),
+        }
+    })
 
 
 @bp.route("/api/knowledge", methods=["GET"])
 def api_knowledge():
     """获取知识库概览"""
-    return jsonify({
-        "ok": True,
-        "data": {
-            "documents_count": len(rag_kb.documents),
-            "vocabulary_size": len(rag_kb.vocabulary),
-            "categories": list(set(d.get("category", "") for d in rag_kb.documents))
-        }
-    })
+    return jsonify({"ok": True, "data": rag_kb.get_stats()})

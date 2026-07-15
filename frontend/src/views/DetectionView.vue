@@ -69,15 +69,32 @@
               <n-input v-model:value="ragQuery" placeholder="搜索攻击模式、TTP、APT组织..." size="small" @keyup.enter="doRagSearch" />
               <n-button type="primary" size="small" @click="doRagSearch">搜索</n-button>
             </n-input-group>
+            <div class="kb-meta">
+              <n-tag size="tiny" :type="knowledge.backend === 'chroma' ? 'success' : 'warning'">
+                {{ knowledge.backend === 'chroma' ? 'Chroma' : 'TF-IDF 回退' }}
+              </n-tag>
+              <n-tag size="tiny">{{ knowledge.documents_count }} 条</n-tag>
+              <n-tag size="tiny">{{ knowledge.categories.length }} 类</n-tag>
+            </div>
             <n-spin :show="ragSearching">
               <n-empty v-if="!ragResults.length && !ragSearching" description="输入关键词检索 MITRE ATT&CK 知识库" style="font-size: 11px" />
               <div v-for="r in ragResults" :key="r.title" class="rag-item">
                 <strong>{{ r.title }}</strong>
                 <n-space>
                   <n-tag type="info" size="tiny">{{ r.category }}</n-tag>
+                  <n-tag size="tiny" :type="r.engine === 'chroma' ? 'success' : 'warning'">{{ r.engine || 'tfidf' }}</n-tag>
                   <n-tag size="tiny">{{ (r.similarity * 100).toFixed(0) }}%</n-tag>
                 </n-space>
-                <div class="rag-snippet">{{ (r.content || '').substring(0, 120) }}...</div>
+                <div class="rag-source">
+                  <span>{{ r.source_id || r.id }}</span>
+                  <span v-if="r.source_file"> · {{ r.source_file }}</span>
+                </div>
+                <div class="rag-source" v-if="r.metadata?.technique_id || r.metadata?.apt_group || r.metadata?.cve_id">
+                  <span v-if="r.metadata?.technique_id">TTP: {{ r.metadata.technique_id }}</span>
+                  <span v-if="r.metadata?.apt_group"> · APT: {{ r.metadata.apt_group }}</span>
+                  <span v-if="r.metadata?.cve_id"> · CVE: {{ r.metadata.cve_id }}</span>
+                </div>
+                <div class="rag-snippet">{{ ((r.snippet || r.content || '').substring(0, 160)) }}...</div>
               </div>
             </n-spin>
           </n-space>
@@ -86,10 +103,11 @@
         <!-- Engine Info -->
         <n-card title="⚙ 检测引擎技术栈" size="small" :bordered="false" class="section-card">
           <div class="info-row"><span>规则引擎</span><n-tag type="success" size="tiny">9条内置规则</n-tag></div>
-          <div class="info-row"><span>RAG知识增强</span><n-tag type="info" size="tiny">37篇安全文档</n-tag></div>
+          <div class="info-row"><span>RAG知识增强</span><n-tag :type="knowledge.backend === 'chroma' ? 'success' : 'warning'" size="tiny">{{ knowledge.backend === 'chroma' ? 'Chroma 持久化' : 'TF-IDF 回退' }}</n-tag></div>
+          <div class="info-row"><span>知识条目数</span><n-tag type="info" size="tiny">{{ knowledge.documents_count }} 条</n-tag></div>
           <div class="info-row"><span>LLM深度分析</span><n-tag type="info" size="tiny">Qwen-Flash</n-tag></div>
           <div class="info-row"><span>数据源</span><n-tag type="info" size="tiny">3类 (日志+行为+流量)</n-tag></div>
-          <div class="info-row"><span>威胁建模</span><n-tag type="warning" size="tiny">MITRE ATT&CK v15</n-tag></div>
+          <div class="info-row"><span>威胁建模</span><n-tag type="warning" size="tiny">{{ knowledge.versions?.attck_techniques || 'MITRE ATT&CK' }}</n-tag></div>
         </n-card>
       </n-grid-item>
     </n-grid>
@@ -110,7 +128,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getDetectionStats, getAlerts, runFullAnalysis, ragSearch } from '@/api/detection'
+import { getDetectionStats, getAlerts, runFullAnalysis, ragSearch, getKnowledgeBase } from '@/api/detection'
 import { toBeijingTime } from '@/utils/time'
 
 const message = useMessage()
@@ -124,6 +142,7 @@ const reportText = ref('')
 const ragQuery = ref('')
 const ragResults = ref<any[]>([])
 const ragSearching = ref(false)
+const knowledge = ref<any>({ backend: 'tfidf', documents_count: 0, categories: [], versions: {}, chroma: {} })
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const filteredAlerts = computed(() => {
@@ -191,12 +210,22 @@ async function doRagSearch() {
   finally { ragSearching.value = false }
 }
 
+async function fetchKnowledge() {
+  try {
+    const res = await getKnowledgeBase()
+    if (res.data?.ok) {
+      knowledge.value = res.data.data || knowledge.value
+    }
+  } catch {}
+}
+
 function copyReport() {
   navigator.clipboard?.writeText(reportText.value).then(() => message.success('报告已复制'))
 }
 
 onMounted(() => {
   pollAll()
+  fetchKnowledge()
   pollTimer = setInterval(pollAll, 3000)
 })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
@@ -221,6 +250,8 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .text-muted { color: #6b7280; }
 .tactic-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
 .rag-item { padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+.kb-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.rag-source { font-size: 11px; color: #6b7280; margin-top: 2px; }
 .rag-snippet { font-size: 11px; color: #6b7280; margin-top: 4px; }
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; }
 .report-pre { background: #f8fafc; padding: 20px; border-radius: 8px; max-height: 500px; overflow: auto; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }

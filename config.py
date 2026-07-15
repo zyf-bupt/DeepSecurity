@@ -53,6 +53,12 @@ class Config:
     ATTCK_DATA_FILE = 'knowledge_base/attck_techniques.json'
     APT_GROUPS_FILE = 'knowledge_base/apt_groups.json'
     RAG_CORPUS_FILE = 'knowledge_base/rag_corpus.json'
+    CHROMA_PERSIST_DIR = os.environ.get("CHROMA_PERSIST_DIR") or "data/chroma"
+    CHROMA_COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION_NAME") or "deepsecurity_kb"
+    RAG_EMBEDDING_BACKEND = os.environ.get("RAG_EMBEDDING_BACKEND") or "local"
+    EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY") or ""
+    EMBEDDING_BASE_URL = os.environ.get("EMBEDDING_BASE_URL") or ""
+    EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL") or "text-embedding-3-small"
 
     # ===== LLM Detection Engine Settings =====
     LLM_API_KEY = os.environ.get("LLM_API_KEY") or ""

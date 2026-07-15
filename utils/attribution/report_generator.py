@@ -16,7 +16,8 @@ class ReportGenerator:
                                        attribution: dict,
                                        profile: dict,
                                        chains: list[dict],
-                                       detection_stats: dict) -> str:
+                                       detection_stats: dict,
+                                       knowledge_refs: list[dict] | None = None) -> str:
         """生成综合分析报告"""
 
         lines = []
@@ -110,6 +111,18 @@ class ReportGenerator:
                              f"{match.get('similarity_score', 0):.1%} | "
                              f"{match.get('country', 'N/A')} | "
                              f"{match.get('motivation', 'N/A')} |")
+
+        if knowledge_refs:
+            lines.append(f"\n### 4.3 归因支撑知识条目")
+            for ref in knowledge_refs[:4]:
+                lines.append(
+                    f"- **{ref.get('title', 'N/A')}** "
+                    f"(`{ref.get('category', 'unknown')}` / {ref.get('engine', 'tfidf')} / "
+                    f"{ref.get('similarity', 0):.0%})"
+                )
+                if ref.get("metadata", {}).get("technique_id"):
+                    lines.append(f"  - 匹配 TTP: `{ref['metadata'].get('technique_id')}`")
+                lines.append(f"  - 来源: `{ref.get('source_file', '')}`")
 
         # ===== 攻击者画像 =====
         lines.append(f"\n---")

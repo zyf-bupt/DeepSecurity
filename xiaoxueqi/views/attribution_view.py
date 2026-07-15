@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, render_template, request
 from utils.attribution.attribution_engine import AttributionEngine
 from utils.attribution.attacker_profiler import AttackerProfiler
 from utils.attribution.report_generator import ReportGenerator
+from utils.detection.rag_knowledge_base import get_rag_kb
 from utils.scenarios.scenario_manager import get_scenario_manager
 
 bp = Blueprint("attribution", __name__)
@@ -11,6 +12,7 @@ bp = Blueprint("attribution", __name__)
 attribution_engine = AttributionEngine()
 attacker_profiler = AttackerProfiler()
 report_generator = ReportGenerator()
+rag_kb = get_rag_kb()
 
 # 缓存最近的分析结果
 _cached_result: dict | None = None
@@ -57,18 +59,27 @@ def api_attribute():
     )
 
     # 构建画像
+    ttps = attribution_result.get("ttps_extracted", [])
     profile = attacker_profiler.build_profile(
         attribution_data=attribution_result,
         behavioral=attribution_result.get("attribution", {}).get("result", {}).get(
             "behavioral_profile", {}),
         iocs=verdict.get("iocs", {}),
-        ttps=attribution_result.get("ttps_extracted", [])
+        ttps=ttps
+    )
+
+    knowledge_refs = rag_kb.collect_supporting_references(
+        technique_ids=[t.get("technique_id", "") for t in ttps],
+        technique_names=[t.get("technique_name", "") for t in ttps],
+        apt_name=attribution_result.get("attribution", {}).get("result", {}).get("best_match", ""),
+        top_k=4,
     )
 
     # 缓存
     _cached_result = {
         "attribution": attribution_result,
         "profile": profile,
+        "knowledge_refs": knowledge_refs,
         "timestamp": __import__("datetime").datetime.now().isoformat()
     }
 
@@ -87,7 +98,8 @@ def api_report():
         attribution=_cached_result.get("attribution", {}),
         profile=_cached_result.get("profile", {}),
         chains=_cached_result.get("attribution", {}).get("chains", []),
-        detection_stats={}
+        detection_stats={},
+        knowledge_refs=_cached_result.get("knowledge_refs", []),
     )
     return jsonify({"ok": True, "data": report})
 

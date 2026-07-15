@@ -23,5 +23,7 @@ xiaoxueqi/static/spa/
 # Runtime capture/upload data
 data/uploads/
 data/live_captures/
+data/chroma/
 *.pcap
 *.pcapng
+frontend/.npm_cache/
